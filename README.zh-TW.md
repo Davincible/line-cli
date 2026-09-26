@@ -62,8 +62,8 @@ Secret Service 金鑰圈必須在同一個 D-Bus 工作階段中執行並保持�
 
 > [!IMPORTANT]
 > 透過 SSH 或無頭環境使用 Linux 時，只安裝套件還不夠。如果 CLI 所在的
-> D-Bus 工作階段沒有已解鎖的 Secret Service，登入流程會在要求 LINE 密碼或
-> 手機驗證前的儲存空間檢查階段停止。
+> D-Bus 工作階段沒有已解鎖的 Secret Service，登入流程會在產生 QR 碼或
+> 要求 LINE 密碼前的儲存空間檢查階段停止。
 
 在支援的無頭 Linux 系統上，可使用 `line login --headless`。明確同意限制後，
 CLI 會改用 systemd 使用者範圍的主機金鑰儲存機制。此方式無法防止整顆磁碟遭
@@ -124,16 +124,29 @@ Windows 請使用 [PowerShell 建置指令](CLI.md#build-from-source)。
 
 ## 在終端機使用 LINE
 
-你的 LINE 帳號必須先設定電子郵件地址與密碼。登入採互動式流程，且需在
-手機上核准。
+`line login` 預設使用互動式 QR 碼登入，請用手機上的 LINE 掃描終端機顯示的
+QR 碼。`line login --email ADDRESS` 則保留電子郵件與密碼登入方式。
+
+> [!IMPORTANT]
+> QR 登入尚未經過 LINE 實際環境驗證。目前首次 QR 登入會停在憑證驗證，
+> 因為啟動 PIN 驗證所需的伺服器拒絕代碼尚未確認。請先使用下方的電子郵件
+> 登入方式，並在 LINE 帳號設定電子郵件地址與密碼；流程可能需要手機核准。
+> 詳見[登入選項與限制](CLI.md#login)。
 
 ```sh
-line login
+line login --email you@example.com
 line whoami
 line chats
 line messages "Family group" --limit 10
 line send "Alice" --text "Hello!"
 ```
+
+兩種登入方式都會先檢查儲存空間，並在取代可用的本機工作階段前詢問。
+`--force` 只略過這個確認，不會略過其他檢查。進度、QR 碼與 PIN 輸出至 stderr，
+成功訊息輸出至 stdout。終端機過窄或需要無障礙替代方式時，可用
+`line login --qr-url` 顯示一次性敏感資料，再交由可信任的本機工具產生 QR 碼；
+不要分享、儲存或上傳至線上產生器。SSH 與 `--headless` 登入仍需互動式終端機。
+目前無頭 Linux 可使用 `line login --headless --email you@example.com` 登入。
 
 以參數指定名稱時，名稱必須完全相符，且不得與其他名稱重複。若要透過
 互動介面選擇聊天室，執行指令時不要提供目標：
@@ -191,6 +204,7 @@ LINE CLI 採用 LINE Chrome 類型的通訊協定。伺服器端的變更可能�
 ## 目前限制
 
 - 每位作業系統使用者只能儲存一個帳號
+- QR 登入仍屬實驗功能：首次憑證／PIN 流程與手機實際掃描尚未驗證。請使用 `line login --email ADDRESS`；QR 登入不支援已關閉 Letter Sealing 的帳號。
 - 只能讀取近期記錄，每次最多 100 則訊息
 - 僅支援一般檔案傳輸，不支援貼圖或特殊媒體訊息
 - 讀取訊息不會將訊息標示為已讀

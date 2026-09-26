@@ -66,8 +66,8 @@ The Secret Service keyring must be running and unlocked in the same D-Bus sessio
 > [!IMPORTANT]
 > On SSH/headless Linux, installing the packages alone is insufficient. Without
 > an unlocked Secret Service in the CLI's D-Bus session, login fails its storage
-> check before requesting a LINE password or phone verification. Storage is
-> checked again after password input; later keyring or filesystem failures can
+> check before creating a QR code or requesting a LINE password. Storage is
+> checked again after local prompts; later keyring or filesystem failures can
 > still prevent saving the session.
 
 On supported headless Linux systems, `line login --headless` uses systemd
@@ -133,16 +133,30 @@ instructions and contributor checks.
 
 ## Use LINE from the terminal
 
-Your LINE account needs an email address and password. Login is interactive and
-requires approval from your phone.
+`line login` now selects interactive QR login: scan the terminal code with LINE
+on your phone. `line login --email ADDRESS` keeps the email/password flow.
+
+> [!IMPORTANT]
+> QR login has not yet been validated against live LINE. First-time QR login
+> currently stops at certificate verification because the server rejection code
+> needed to start PIN verification is not yet verified. Use the email fallback
+> below, with an email address and password configured on your LINE account.
+> See [login options and limitations](CLI.md#login).
 
 ```sh
-line login
+line login --email you@example.com
 line whoami
 line chats
 line messages "Family group" --limit 10
 line send "Alice" --text "Hello!"
 ```
+
+Both methods check storage and ask before replacing a usable saved session.
+`--force` skips that replacement question. Login progress goes to stderr; only
+completion output goes to stdout. For a narrow or accessible terminal,
+`line login --qr-url` explicitly shows a sensitive one-time value for a trusted
+local QR tool; do not share it or use an online generator. Login remains
+interactive, including over SSH and with `--headless`.
 
 Names must be unique exact matches when passed as arguments. Run a command
 without a target to choose a chat interactively:
@@ -201,6 +215,7 @@ compatibility.
 ## Current limitations
 
 - One saved account per OS user
+- QR login is experimental: first-time certificate/PIN handling and live phone scans remain unverified. Use `line login --email ADDRESS` for the existing login flow. QR login with Letter Sealing disabled is not supported.
 - LINE access tokens commonly reach a refresh boundary at around 168 hours (7 days). The CLI refreshes them automatically when possible, but a rejected or invalidated refresh token requires `line login` again.
 - Recent history only, up to 100 messages per read
 - Generic file transfer only; no stickers or specialized media messages

@@ -11,11 +11,13 @@
 - [x] Session orchestration, contextual completion, and complete-save validation.
 - [x] Terminal QR UI and method selection.
 - [x] Signal cancellation, input interruption, and terminal restoration.
+- [x] CLI guide and English, Traditional Chinese, Japanese, and Thai README updates.
 - [ ] Authorized live validation of outstanding protocol unknowns.
 
-Status: phases 1–5 implemented; no live QR login validation. User documentation
-remains pending. Unknown certificate errors
-still fail closed, so first-time QR login awaits certificate rejection evidence.
+Status: phases 1–5 and phase 6 documentation implemented; no live QR login
+validation as of 2026-09-27. Unknown certificate errors still fail closed, so
+first-time QR login awaits certificate rejection evidence. User documentation
+labels QR login experimental and retains the explicit email fallback.
 
 Evidence: LINE Chrome Extension manifest 3.7.2, local static bundle. `main.js`
 SHA-256: `2912a06d868c2829636be1613c622f28807efe74a7868cfb143678a38b80cc2a`.
