@@ -224,6 +224,56 @@ func TestQRPinTimeoutAndCertificateErrors(t *testing.T) {
 	}
 }
 
+func TestQREmptyCertificatePINFallback(t *testing.T) {
+	// Minimal synthetic envelopes using the user's 2026-09-27 numeric diagnostic,
+	// not raw captures. Only the observed empty-certificate tuple is recognized.
+	for _, tc := range []struct {
+		name, certificate, body string
+		status                  int
+		fallback                bool
+	}{
+		{"observed_empty_certificate", "", `{"code":10051,"data":{"code":2}}`, 400, true},
+		{"unverified_saved_certificate", "synthetic-cert", `{"code":10051,"data":{"code":2}}`, 400, false},
+		{"other_http_status", "", `{"code":10051,"data":{"code":2}}`, 500, false},
+		{"other_gateway", "", `{"code":10052,"data":{"code":2}}`, 400, false},
+		{"other_service", "", `{"code":10051,"data":{"code":3}}`, 400, false},
+		{"missing_service", "", `{"code":10051,"data":{}}`, 400, false},
+		{"string_service", "", `{"code":10051,"data":{"code":"2"}}`, 400, false},
+		{"unstructured", "", `private-body`, 400, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			calls := 0
+			c := qrTestClient(func(req *http.Request) (*http.Response, error) {
+				calls++
+				if !strings.HasSuffix(req.URL.Path, "/verifyCertificate") {
+					t.Fatal("unexpected endpoint")
+				}
+				return qrTestResponse(tc.status, tc.body), nil
+			})
+			err := c.VerifyQRCertificate(context.Background(), qrTestSession, tc.certificate)
+			if err == nil || errors.Is(err, ErrQRCertificateRejected) != tc.fallback || calls != 1 {
+				t.Fatal("wrong certificate classification or retry", err)
+			}
+			if strings.Contains(err.Error(), "private-body") {
+				t.Fatal("body leaked")
+			}
+			if tc.fallback {
+				var detail *QRServiceError
+				if !errors.As(err, &detail) || detail.ServiceCode == nil || *detail.ServiceCode != 2 {
+					t.Fatal("lost numeric details")
+				}
+			}
+		})
+	}
+	for _, cause := range []error{context.Canceled, context.DeadlineExceeded, errors.New("private-transport")} {
+		c := qrTestClient(func(*http.Request) (*http.Response, error) { return nil, cause })
+		err := c.VerifyQRCertificate(context.Background(), qrTestSession, "")
+		if err == nil || errors.Is(err, ErrQRCertificateRejected) || strings.Contains(err.Error(), "private-transport") {
+			t.Fatal("unsafe transport fallback")
+		}
+	}
+}
+
 func TestQRLongPollTimeoutAndClientIsolation(t *testing.T) {
 	c := NewClient("")
 	original := c.HTTPClient

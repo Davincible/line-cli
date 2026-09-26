@@ -150,8 +150,8 @@ func (m *Manager) LoginQR(ctx context.Context, notify func(QRLoginEvent) error) 
 		}
 		stage = LoginCertificate
 		if err := api.VerifyQRCertificate(ctx, challenge.AuthSessionID, certificate); err != nil {
-			// No service code is currently mapped to this sentinel. Only an
-			// evidenced certificate rejection may enable the PIN branch.
+			// Only the protocol layer's evidenced certificate rejection permits
+			// PIN fallback. Never treat arbitrary verification failures as consent.
 			if !errors.Is(err, line.ErrQRCertificateRejected) {
 				return nil, err
 			}

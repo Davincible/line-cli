@@ -15,8 +15,8 @@
 - [ ] Authorized live validation of outstanding protocol unknowns.
 
 Status: phases 1–5 and phase 6 documentation implemented; no completed live QR
-login validation as of 2026-09-27. Unknown certificate errors still fail closed, so
-first-time QR login awaits certificate rejection evidence. User documentation
+login validation as of 2026-09-27. The observed empty-certificate error now permits
+PIN fallback; unknown certificate errors still fail closed. User documentation
 labels QR login experimental and retains the explicit email fallback.
 
 User-reported smoke test (2026-09-27): scanning the terminal QR opened LINE's
@@ -27,6 +27,20 @@ code, PIN behavior, completed authentication, key export, or secure save.
 No protocol capture was collected. Certificate verification now has a separate
 error stage with numeric HTTP/gateway/status/service diagnostics; it does not
 print response text, and unknown errors still cannot trigger PIN fallback.
+
+A second user-reported run with diagnostic checkpoint `680388e` identified
+`verifyCertificate`, HTTP 400, gateway code 10051, and service code 2. The CLI
+reported status 0; that field is not parsed for gateway code 10051 and does not
+establish any nested HTTP status. In this first-login flow, no QR-origin
+certificate has been saved, so the existing request logic submits an empty
+certificate. This is a user-supplied numeric diagnostic, not a raw capture.
+
+The implementation now classifies exactly that HTTP/gateway/service tuple,
+only at `verifyCertificate` and only when the submitted certificate is empty.
+It enables Chrome's evidenced `createPinCode` → `checkPinCodeVerified` path.
+The original numeric error remains available through unwrapping. No meaning is
+assigned to service code 2 on other methods, with saved certificates, or under
+different HTTP/gateway statuses. PIN success and completed login remain unverified.
 
 Evidence: LINE Chrome Extension manifest 3.7.2, local static bundle. `main.js`
 SHA-256: `2912a06d868c2829636be1613c622f28807efe74a7868cfb143678a38b80cc2a`.
@@ -76,8 +90,8 @@ cancellation and deadline identity remain available through `errors.Is`.
 
 ## Unverified behavior
 
-- Exact invalid/missing-certificate rejection codes. All errors currently
-  propagate; there is no guessed classification that permits PIN fallback.
+- Other certificate rejection codes and rejection of saved certificates.
+  Only the observed empty-certificate tuple above permits PIN fallback.
 - Actual outer HTTP statuses and wire envelopes for polling expiry.
 - Explicit QR LSOFF capability metadata. Missing/malformed keys and unknown
   metadata errors fail closed; `NoE2EE` is never inferred.
@@ -120,10 +134,10 @@ Estimated expiry includes the scan intervals and retry backoff. It never drives
 regeneration.
 
 Only a non-invalidated, QR-origin certificate can be reused. State now records
-`certificate_origin`; an absent value means unknown. PIN fallback requires the
-reserved `ErrQRCertificateRejected` signal. No actual service error currently
-produces that signal, pending evidence. Synthetic PIN tests establish only the
-orchestrator's contract, not a server rejection code.
+`certificate_origin`; an absent value means unknown. PIN fallback requires
+`ErrQRCertificateRejected`, produced only for the observed empty-certificate
+HTTP 400 / gateway 10051 / service 2 response. Synthetic tests check that narrow
+classification and orchestration; they do not prove successful live PIN approval.
 
 Both login methods use contextual profile validation and encrypted identity
 retrieval, then export keys and save the complete state. QR requires a nonempty

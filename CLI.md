@@ -59,9 +59,10 @@ line help
 
 ## Quick start
 
-Bare `line login` selects QR login. QR login is experimental and first-time
-certificate verification currently blocks PIN fallback; use the existing email
-flow below until live validation is complete. Your account must have an email
+Bare `line login` selects QR login. QR login is experimental: the observed
+first-login certificate response now enables PIN fallback, but completed login
+still needs live validation. Use the existing email flow below in the meantime.
+Your account must have an email
 address and password configured for this fallback, and may require phone approval.
 
 ```sh
@@ -109,12 +110,13 @@ code in LINE exactly as shown, including any leading zeros. Wait for
 `Session saved securely` before relying on the new session: phone approval
 alone does not mean profile validation, key export, or local saving succeeded.
 
-**Live QR login is not yet validated.** In particular, the server's rejection
-code for an absent or invalid QR certificate is unknown. The CLI currently stops
-on that error instead of proceeding to PIN verification. First-time QR login
-therefore cannot complete yet. A saved QR certificate is reused only when known
-to come from a QR login; legacy and email certificates are not reused. Successful
-live reuse is also unverified. Use `--email ADDRESS` for the existing login flow.
+**Completed QR login is not yet live-validated.** A user-reported first-login
+certificate response now enables PIN verification. Other certificate errors
+still stop login, and successful PIN approval, key export, and saving remain
+unverified. A saved QR certificate is reused only when known to come from a QR
+login; legacy and email certificates are not reused. Successful live reuse and
+PIN fallback for rejected saved certificates are also unverified. Use
+`--email ADDRESS` for the existing login flow.
 QR accounts with Letter Sealing disabled are unsupported; missing encryption
 data never silently disables encryption.
 
@@ -597,7 +599,7 @@ DPAPI roundtrip and preflight tests against temporary files.
 ## Current limitations
 
 - One saved LINE account per OS user.
-- QR login is experimental; first-time certificate/PIN handling and live phone/SSH scans remain unverified. Use `--email ADDRESS` for the existing login flow. QR login with Letter Sealing disabled is unsupported.
+- QR login is experimental: a user-reported phone scan reached approval, but PIN completion, key export, saving, saved-certificate reuse, and SSH scans still need live validation. Use `--email ADDRESS` for the existing login flow. QR login with Letter Sealing disabled is unsupported.
 - Recent history only, with at most 100 messages per read.
 - Generic files only; no stickers or specialized media sending.
 - Reading messages does not mark them as read.

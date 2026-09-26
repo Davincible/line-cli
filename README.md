@@ -137,10 +137,10 @@ instructions and contributor checks.
 on your phone. `line login --email ADDRESS` keeps the email/password flow.
 
 > [!IMPORTANT]
-> QR login has not yet been validated against live LINE. First-time QR login
-> currently stops at certificate verification because the server rejection code
-> needed to start PIN verification is not yet verified. Use the email fallback
-> below, with an email address and password configured on your LINE account.
+> QR login has not yet completed live validation. PIN fallback now recognizes the
+> observed first-login certificate response; PIN approval, key export, and saving
+> still need live verification. Use the email fallback below for the existing
+> flow, with an email address and password configured on your LINE account.
 > See [login options and limitations](CLI.md#login).
 
 ```sh
@@ -215,7 +215,7 @@ compatibility.
 ## Current limitations
 
 - One saved account per OS user
-- QR login is experimental: first-time certificate/PIN handling and live phone scans remain unverified. Use `line login --email ADDRESS` for the existing login flow. QR login with Letter Sealing disabled is not supported.
+- QR login is experimental: the phone recognized a QR in a user-reported test, but PIN completion, key export, saving, and saved-certificate reuse remain unverified. Use `line login --email ADDRESS` for the existing login flow. QR login with Letter Sealing disabled is not supported.
 - LINE access tokens commonly reach a refresh boundary at around 168 hours (7 days). The CLI refreshes them automatically when possible, but a rejected or invalidated refresh token requires `line login` again.
 - Recent history only, up to 100 messages per read
 - Generic file transfer only; no stickers or specialized media messages

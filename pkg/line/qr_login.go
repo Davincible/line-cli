@@ -35,15 +35,16 @@ package line
 //     {"X-Line-Session-ID": session, "X-LST": rH} where rH=11e4 (110000ms);
 //     createPinCode returns {pinCode}.
 //   - verifyCertificate posts {authSessionId, certificate}; Chrome catches
-//     every rejection and falls back to PIN. Rejection codes are unknown, so
-//     this client propagates verify errors without any PIN-fallback
-//     classification.
+//     every rejection and falls back to PIN. A user-reported first-login
+//     diagnostic on 2026-09-27 evidenced HTTP 400, gateway 10051, service 2.
+//     Only that tuple with an empty certificate permits PIN fallback here;
+//     other errors and saved-certificate rejection remain unclassified.
 //   - QR metadata is inspected for errorCode absent/SUCCESS plus keyId
 //     before unwrapping keys. Absence of keyId is not evidence of an
 //     explicit LSOFF capability, and no LSOFF metadata shape is evidenced.
 //
 // Unknowns requiring live validation (do not invent): the outer HTTP status
-// and wire envelope for scan polling, exact invalid/missing-certificate
+// and wire envelope for scan polling, other invalid/missing-certificate
 // error codes, LSON/LSOFF metaData shapes, and the displacement boundary of
 // qrCodeLoginV2.
 
@@ -84,15 +85,15 @@ var (
 	// ErrQRCodeExpired means all scan polls for one QR session returned the
 	// evidenced wrapped 410. Only this error permits a fresh QR attempt.
 	ErrQRCodeExpired = errors.New("QR code expired before scan")
-	// ErrQRCertificateRejected is reserved for evidenced invalid/missing certificate
-	// responses. No server code is mapped yet; unknown failures propagate.
+	// ErrQRCertificateRejected identifies the evidenced empty-certificate response.
+	// Unknown failures, including unverified saved-certificate rejection, propagate.
 	ErrQRCertificateRejected = errors.New("QR certificate rejected")
 	ErrQRPinTimeout          = errors.New("PIN approval timed out")
 )
 
 // QRServiceError retains numeric classification without retaining server
 // messages, exception names, URLs, or raw response bodies. No certificate
-// rejection code is classified until evidence establishes one.
+// rejection code is classified outside the narrowly evidenced verification case.
 type QRServiceError struct {
 	Method      string
 	HTTPStatus  int
@@ -252,12 +253,22 @@ func (c *Client) waitForQRScan(ctx context.Context, challenge *QRChallenge, slee
 }
 
 // VerifyQRCertificate submits even an empty certificate, as Chrome does on a
-// first login. All failures propagate; no speculative PIN fallback is applied.
+// first login. The empty-certificate tuple below was reported by the user from
+// the CLI's numeric-only diagnostic on 2026-09-27 after scan/phone approval.
+// It is not a general meaning assigned to service code 2, nor evidence about
+// invalid saved certificates. Chrome's static flow supplies the PIN next step.
 func (c *Client) VerifyQRCertificate(ctx context.Context, sessionID, certificate string) error {
 	if sessionID == "" {
 		return errors.New("QR certificate verification requires a session ID")
 	}
-	return c.qrCall(ctx, qrLoginServiceRoot, "verifyCertificate", qrCertificateRequest{sessionID, certificate}, "", 0, nil)
+	err := c.qrCall(ctx, qrLoginServiceRoot, "verifyCertificate", qrCertificateRequest{sessionID, certificate}, "", 0, nil)
+	var response *QRServiceError
+	if certificate == "" && errors.As(err, &response) && response.Method == "verifyCertificate" &&
+		response.HTTPStatus == http.StatusBadRequest && response.Code == 10051 &&
+		response.ServiceCode != nil && *response.ServiceCode == 2 {
+		return errors.Join(ErrQRCertificateRejected, err)
+	}
+	return err
 }
 
 // CreateQRPin returns the server's PIN verbatim, including any leading zeros.
