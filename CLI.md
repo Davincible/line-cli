@@ -118,6 +118,12 @@ live reuse is also unverified. Use `--email ADDRESS` for the existing login flow
 QR accounts with Letter Sealing disabled are unsupported; missing encryption
 data never silently disables encryption.
 
+A certificate-verification error reports that stage separately. When a structured
+server error is available, its `Diagnostic: verifyCertificate` suffix contains
+only numeric HTTP, gateway, status, and optional service codes. That diagnostic
+can help identify the missing protocol evidence; it does not expose the QR value,
+PIN, certificate, tokens, or server response text.
+
 The displayed expiry time is approximate and appears only when stderr supports
 in-place terminal updates. Reaching zero does not replace the QR. Confirmed
 expiry creates a fresh code, up to three codes per login. Network failures and

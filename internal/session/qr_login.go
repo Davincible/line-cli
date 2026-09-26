@@ -148,12 +148,14 @@ func (m *Manager) LoginQR(ctx context.Context, notify func(QRLoginEvent) error) 
 		if err := emit(QRLoginEvent{Kind: QRLoginScanned, Attempt: attempt}); err != nil {
 			return nil, err
 		}
+		stage = LoginCertificate
 		if err := api.VerifyQRCertificate(ctx, challenge.AuthSessionID, certificate); err != nil {
 			// No service code is currently mapped to this sentinel. Only an
 			// evidenced certificate rejection may enable the PIN branch.
 			if !errors.Is(err, line.ErrQRCertificateRejected) {
 				return nil, err
 			}
+			stage = LoginPhoneApproval
 			if err := ctx.Err(); err != nil {
 				return nil, err
 			}
@@ -171,6 +173,7 @@ func (m *Manager) LoginQR(ctx context.Context, notify func(QRLoginEvent) error) 
 				return nil, err
 			}
 		}
+		stage = LoginPhoneApproval
 		if err := emit(QRLoginEvent{Kind: QRLoginPhoneAccepted, Attempt: attempt}); err != nil {
 			return nil, err
 		}

@@ -282,6 +282,43 @@ func TestQRFinalAndSetupErrors(t *testing.T) {
 	}
 }
 
+func TestQRCertificateFailureDiagnostic(t *testing.T) {
+	// These numbers exercise formatting only; they are not evidence of a
+	// certificate rejection code and must never enable PIN fallback.
+	serviceCode := 987654
+	for _, cause := range []error{
+		&line.QRServiceError{Method: "SENSITIVE-method", HTTPStatus: 400, Code: 123456, StatusCode: 409, ServiceCode: &serviceCode},
+		errors.New("SENSITIVE-transport-body"),
+		context.Canceled,
+	} {
+		m, s, api, key := qrTestManager(t)
+		api.verifyErr = cause
+		_, err := m.LoginQR(context.Background(), ignoreQREvent)
+		var outcome *LoginError
+		if !errors.As(err, &outcome) || outcome.Stage != LoginCertificate || outcome.Dispatched || outcome.Approved || !errors.Is(err, cause) {
+			t.Fatal("certificate failure lost its stage or cause")
+		}
+		message := err.Error()
+		if strings.Contains(message, "SENSITIVE") || strings.Contains(message, "Phone approval could not") {
+			t.Fatal("unsafe or misleading certificate error")
+		}
+		if !errors.Is(cause, context.Canceled) && (!strings.Contains(message, "QR certificate verification failed") || !strings.Contains(message, "--email")) {
+			t.Fatal("missing certificate failure guidance")
+		}
+		var response *line.QRServiceError
+		if errors.As(cause, &response) {
+			if !strings.Contains(message, "verifyCertificate (HTTP 400, gateway 123456, status 409, service 987654)") {
+				t.Fatal("missing numeric diagnostic")
+			}
+		} else if strings.Contains(message, "Diagnostic:") {
+			t.Fatal("invented response diagnostic")
+		}
+		if api.completeCount != 0 || s.saves != 0 || s.state.AccessToken != "old" || key.closed != 1 || strings.Contains(strings.Join(api.calls, ","), "pin") {
+			t.Fatal("certificate failure retried, dispatched login, saved, or leaked key")
+		}
+	}
+}
+
 func TestQRCancellationBeforeSave(t *testing.T) {
 	for _, point := range []string{"scan", "pin", "phone_accepted", "approved", "profile", "export"} {
 		t.Run(point, func(t *testing.T) {

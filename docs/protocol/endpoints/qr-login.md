@@ -14,10 +14,19 @@
 - [x] CLI guide and English, Traditional Chinese, Japanese, and Thai README updates.
 - [ ] Authorized live validation of outstanding protocol unknowns.
 
-Status: phases 1–5 and phase 6 documentation implemented; no live QR login
-validation as of 2026-09-27. Unknown certificate errors still fail closed, so
+Status: phases 1–5 and phase 6 documentation implemented; no completed live QR
+login validation as of 2026-09-27. Unknown certificate errors still fail closed, so
 first-time QR login awaits certificate rejection evidence. User documentation
 labels QR login experimental and retains the explicit email fallback.
+
+User-reported smoke test (2026-09-27): scanning the terminal QR opened LINE's
+Chrome login approval screen on the phone. The user tapped Log in, then the CLI
+reported its generic phone-approval failure and returned. This confirms the
+phone recognized that QR, but does not establish the failing endpoint or server
+code, PIN behavior, completed authentication, key export, or secure save.
+No protocol capture was collected. Certificate verification now has a separate
+error stage with numeric HTTP/gateway/status/service diagnostics; it does not
+print response text, and unknown errors still cannot trigger PIN fallback.
 
 Evidence: LINE Chrome Extension manifest 3.7.2, local static bundle. `main.js`
 SHA-256: `2912a06d868c2829636be1613c622f28807efe74a7868cfb143678a38b80cc2a`.

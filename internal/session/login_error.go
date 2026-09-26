@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/kongesque/line-cli/pkg/line"
 )
@@ -12,6 +13,7 @@ type LoginStage string
 const (
 	LoginLocal         LoginStage = "local"
 	LoginBeforeScan    LoginStage = "before_scan"
+	LoginCertificate   LoginStage = "certificate"
 	LoginPhoneApproval LoginStage = "phone_approval"
 	LoginFinal         LoginStage = "final"
 	LoginSetup         LoginStage = "setup"
@@ -49,6 +51,20 @@ func (e *LoginError) Error() string {
 	}
 	if e.Dispatched {
 		return "Login's outcome could not be confirmed. Your saved session was not changed." + displaced
+	}
+	if e.Stage == LoginCertificate {
+		message := "QR certificate verification failed. PIN fallback is not available for this response. Your saved session was not changed. Close the phone prompt and use line login --email you@example.com."
+		var response *line.QRServiceError
+		if errors.As(e.cause, &response) {
+			// Only numeric fields are safe to display. Do not format the wrapped
+			// error or its method/name, which need not be trusted caller input.
+			message += fmt.Sprintf(" Diagnostic: verifyCertificate (HTTP %d, gateway %d, status %d", response.HTTPStatus, response.Code, response.StatusCode)
+			if response.ServiceCode != nil {
+				message += fmt.Sprintf(", service %d", *response.ServiceCode)
+			}
+			message += ")."
+		}
+		return message
 	}
 	if e.Stage == LoginPhoneApproval {
 		return "Phone approval could not be confirmed. Your saved session was not changed. Wait for the phone prompt to close, then retry line login."
