@@ -59,19 +59,127 @@ line help
 
 ## Quick start
 
-Your LINE account must have an email address and password. Login requires phone
-approval.
+Bare `line login` selects QR login. QR login is experimental: the observed
+first-login certificate response now enables PIN fallback, but completed login
+still needs live validation. Use the existing email flow below in the meantime.
+Your account must have an email
+address and password configured for this fallback, and may require phone approval.
 
 ```sh
-line login
+line login --email you@example.com
 line whoami
 line chats
 line messages "Family group"
 line send "Alice" --text "Hello!"
 ```
 
-Your password is used only during login and is never saved. Run `line login`
-again if the saved session expires.
+Your password is used only during login and is never saved. If the saved session
+expires, sign in again using the same explicit email fallback or the QR flow once
+its live behavior is verified.
+
+## Login
+
+```sh
+line login                         # interactive QR login (experimental)
+line login --qr                    # explicitly select QR
+line login --email you@example.com # email/password fallback
+line login --qr-url                # sensitive URL instead of terminal QR
+line login --force                 # skip saved-session replacement question
+line login --help
+```
+
+| Option | Behavior |
+| --- | --- |
+| `--qr` | Select QR login explicitly; this is also the default. |
+| `--email ADDRESS` | Use hidden password input and the existing phone-verification flow. |
+| `--qr-url` | Print the one-time QR value to stderr for a trusted local QR tool. |
+| `--force` | Skip only the saved-session replacement question. |
+| `--headless` | Linux only: select headless storage, independently of the login method. |
+
+`--email` cannot be combined with `--qr` or `--qr-url`. There is no password flag
+or password environment variable. QR login, including `--qr-url`, requires an
+interactive input terminal; it is not an unattended login API. Redirecting
+stdout is allowed. Progress, the QR, PINs, and warnings use stderr; the final
+success message uses stdout.
+
+### QR status and current limits
+
+The CLI renders a compact QR with a quiet border. Scan it using the QR scanner
+in LINE on your phone. When PIN verification is available, enter the displayed
+code in LINE exactly as shown, including any leading zeros. Wait for
+`Session saved securely` before relying on the new session: phone approval
+alone does not mean profile validation, key export, or local saving succeeded.
+
+**Completed QR login is not yet live-validated.** A user-reported first-login
+certificate response now enables PIN verification. Other certificate errors
+still stop login, and successful PIN approval, key export, and saving remain
+unverified. A saved QR certificate is reused only when known to come from a QR
+login; legacy and email certificates are not reused. Successful live reuse and
+PIN fallback for rejected saved certificates are also unverified. Use
+`--email ADDRESS` for the existing login flow.
+QR accounts with Letter Sealing disabled are unsupported; missing encryption
+data never silently disables encryption.
+
+A certificate-verification error reports that stage separately. When a structured
+server error is available, its `Diagnostic: verifyCertificate` suffix contains
+only numeric HTTP, gateway, status, and optional service codes. That diagnostic
+can help identify the missing protocol evidence; it does not expose the QR value,
+PIN, certificate, tokens, or server response text.
+
+The displayed expiry time is approximate and appears only when stderr supports
+in-place terminal updates. Reaching zero does not replace the QR. Confirmed
+expiry creates a fresh code, up to three codes per login. Network failures and
+PIN timeouts do not start another attempt. Plain terminals and redirected stderr
+receive state changes without a per-second countdown. Expired codes are cleared
+where possible or explicitly marked as expired before their replacement.
+
+If the terminal is too narrow, login stops with the required width and a
+`--qr-url` suggestion; it never prints a clipped QR or automatically exposes its
+value. `NO_COLOR` disables explicit colors. If the code is unreadable with your
+terminal theme or assistive setup, use a trusted local tool with `--qr-url`.
+Do not send that value to an online QR generator, share it, or save it: it is
+sensitive and remains in terminal scrollback. QR images are not saved. Unset
+`QRCODE_DEBUG` before normal QR login because encoder debug mode can write data.
+
+### Saved sessions and cancellation
+
+Before contacting LINE, login checks storage and asks before replacing a usable
+saved session. This prompt describes local state; it does not claim that the
+remote session is valid. Answering no keeps the session and exits successfully.
+`--force` skips only this question. It does not bypass storage checks, concurrent
+session-change detection, headless protection consent, or protocol failures.
+The Chrome-style session warning is still shown.
+
+Ctrl-C cancels QR polling and local prompts. SIGINT exits with 130; SIGTERM exits
+with 143, including when output is redirected. Password echo is restored before
+exit. The legacy email authentication HTTP requests retain their existing
+timeouts; local email prompts and shared completion work are cancellable.
+
+Cancellation before local saving preserves the old saved session. If the final
+login request may have reached LINE, the previous Chrome-style session may
+already have been replaced even when the new session could not be saved. The
+final login request is never automatically retried. Read the reported outcome
+before retrying; cancellation cannot undo remote approval. A successful local
+save is still reported if a signal arrives afterward. An uncertain-save error
+means storage may already have changed: use `line auth status --check` for local
+diagnostics and do not overwrite it with an older copy or blindly repeat login.
+
+### SSH login
+
+Use an interactive SSH terminal; no remote browser is needed for terminal QR
+display. For example:
+
+```sh
+ssh -t user@host
+line login --qr
+# Existing email flow while first-time QR login remains unverified:
+line login --email you@example.com
+```
+
+Choose one login method. SSH does not remove the storage requirement. On a
+supported Linux host without an unlocked keyring, use
+`line login --headless --email you@example.com` for the current fallback, or
+`line login --headless` for experimental QR login. See [headless Linux](#headless-linux).
 
 ## Interactive use
 
@@ -231,7 +339,9 @@ line send CHAT_ID --stdin --json < message.txt
 ```
 
 JSON goes to stdout and diagnostics go to stderr. Successful commands and help
-return exit status 0; errors return 1. Empty result lists are `[]`.
+return exit status 0; ordinary errors return 1. Storage errors use the
+[dedicated codes below](#storage-exit-codes); SIGINT/SIGTERM use 130/143.
+Empty result lists are `[]`.
 
 Important JSON fields include:
 
@@ -270,16 +380,20 @@ On a supported Linux host without an unlocked Secret Service keyring, create a
 new session with:
 
 ```sh
-line login --headless
+line login --headless --email you@example.com
 line auth status
 line auth status --check --json
 ```
 
-The CLI asks you to accept **Host key; no TPM** protection before it requests
-your LINE password. This mode protects the session from other unprivileged users,
-but not from root, malware running as your Unix account, or someone with a complete
-copy of the disk. It does not claim TPM protection. Cancelling enrollment leaves
-no saved LINE session.
+This example uses the email fallback. `line login --headless` selects experimental
+QR login with the same storage protection. Both require an interactive terminal
+for enrollment; `--headless` does not make login unattended.
+
+The CLI asks you to accept **Host key; no TPM** protection before contacting LINE.
+`--force` does not skip this consent. This mode protects the session from other
+unprivileged users, but not from root, malware running as your Unix account, or
+someone with a complete copy of the disk. It does not claim TPM protection.
+Cancelling enrollment before saving leaves no new saved LINE session.
 
 After enrollment, ordinary commands need no storage flag. Signing in again keeps
 the selected backend. `login --headless` never converts or overwrites an existing
@@ -365,13 +479,13 @@ the same account and paths, with `umask 077`.
 
 ### Linux files and upgrades
 
-Login checks native storage before collecting your LINE password and again
-before contacting LINE. The check saves, reads, replaces, and removes a separate
-temporary credential item or encrypted file. It preserves the active session
+Login checks native storage before local login prompts and rechecks session and
+storage identity before contacting LINE. The check saves, reads, replaces, and
+removes a separate temporary credential item or encrypted file. It preserves the active session
 and reports cleanup failures. Existing unreadable or corrupt storage blocks
 login; restore access first, or explicitly log out to remove the local session.
 A successful check cannot guarantee a later save if storage becomes unavailable.
-If another login or logout changes the session during password input, login
+If another login or logout changes the session during local input, login
 stops and asks you to start again.
 
 On Linux, the session file and both process locks share the directory
@@ -410,9 +524,10 @@ Storage failures have dedicated executable exit codes:
 | 75 | Local contention, changed storage during login, or cancelled helper |
 | 78 | Configuration, consent, migration, repair, or interactive-check requirement |
 
-Other CLI and network errors use status 1. `auth status --json` still writes its
-status object when storage is unavailable, then returns the matching nonzero
-status.
+Signals take precedence over storage error codes: SIGINT exits 130 and SIGTERM
+exits 143. Other CLI and network errors use status 1. `auth status --json` still
+writes its status object when storage is unavailable, then returns the matching
+nonzero status.
 
 ### Log out
 
@@ -429,6 +544,7 @@ Use the built-in help for the authoritative option list:
 
 ```sh
 line help
+line login --help
 line chats --help
 line messages --help
 line send --help
@@ -469,6 +585,11 @@ go build -trimpath -o bin/line ./cmd/line
 Ordinary tests use fake APIs and credentials. Live tests require explicit
 authorization and are disabled by default.
 
+Cancellation tests use synthetic subprocesses. On macOS/Linux, the password
+terminal test uses Python 3's standard-library PTY support and skips if Python
+is unavailable. It checks Ctrl-C/SIGINT/SIGTERM, hidden input, and terminal
+restoration without accessing LINE or the credential store.
+
 Storage regressions cover failed writes and cleanup, legacy ciphertext,
 preflight before authentication, and Linux process-lock contention. Native
 Secret Service integration runs only in an explicitly enabled disposable D-Bus
@@ -478,6 +599,7 @@ DPAPI roundtrip and preflight tests against temporary files.
 ## Current limitations
 
 - One saved LINE account per OS user.
+- QR login is experimental: a user-reported phone scan reached approval, but PIN completion, key export, saving, saved-certificate reuse, and SSH scans still need live validation. Use `--email ADDRESS` for the existing login flow. QR login with Letter Sealing disabled is unsupported.
 - Recent history only, with at most 100 messages per read.
 - Generic files only; no stickers or specialized media sending.
 - Reading messages does not mark them as read.

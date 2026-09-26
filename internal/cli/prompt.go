@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/kongesque/line-cli/internal/input"
 	"github.com/kongesque/line-cli/internal/messaging"
 	"github.com/kongesque/line-cli/internal/session"
 )
@@ -16,37 +17,6 @@ import (
 var ErrCancelled = errors.New("cancelled")
 
 type promptAccount struct{ mid, generation string }
-
-func (a *App) keepExistingLogin() (bool, error) {
-	unlock, err := a.Lock()
-	if err != nil {
-		return false, err
-	}
-	s, err := a.Manager.Store.Load()
-	if errors.Is(err, session.ErrNotFound) || (err == nil && (s == nil || s.Invalidated)) {
-		unlock()
-		return false, nil
-	}
-	if err != nil {
-		unlock()
-		return false, err
-	}
-	name := "your saved account"
-	if s.Email != "" {
-		name = s.Email
-	}
-	err = a.rememberAccount()
-	unlock()
-	if err != nil {
-		return false, err
-	}
-	fmt.Fprintln(a.Err, "Already signed in as "+terminalText(name)+".")
-	answer, err := a.ask("Sign in again? [y/N]: ")
-	if err != nil {
-		return false, err
-	}
-	return !strings.EqualFold(strings.TrimSpace(answer), "y"), nil
-}
 
 // Prompts never hold a credential lock. Recheck account identity when work resumes.
 func (a *App) lock() (func(), error) {
@@ -82,18 +52,21 @@ func (a *App) ask(label string) (string, error) {
 	}
 	if a.Context != nil {
 		if err := a.Context.Err(); err != nil {
-			return "", ErrCancelled
+			return "", err
 		}
 	}
 	if _, err := fmt.Fprint(a.Err, label); err != nil {
 		return "", err
 	}
 	if a.input == nil {
-		a.input = bufio.NewReader(a.In)
+		a.input = bufio.NewReader(input.NewReader(a.loginContext(), a.In))
 	}
 	var answer strings.Builder
 	for {
 		part, err := a.input.ReadSlice('\n')
+		if a.loginContext().Err() != nil {
+			return "", a.loginContext().Err()
+		}
 		if answer.Len()+len(part) > messaging.MaxTextUnits*4+1 {
 			return "", errors.New("input exceeds the CLI size limit")
 		}
