@@ -31,6 +31,7 @@ LINE CLI 支援 macOS、Linux 與 Windows，並提供 Letter Sealing 端對端�
 - 讀取近期訊息記錄
 - 傳送單行或多行文字訊息
 - 傳送最大 20 MiB 的一般檔案
+- 下載最大 20 MiB 的圖片、影片、音訊與檔案，儲存至指定路徑或輸出至標準輸出
 - 回覆既有訊息
 - 新增或移除標準表情回應
 - 收回自己傳送的訊息
@@ -167,6 +168,7 @@ line send "Alice" --file ./report.pdf
 line send "Alice" --text "Sounds good" --reply-to MESSAGE_ID
 line react "Alice" --message MESSAGE_ID --reaction love
 line download "Alice" --message MESSAGE_ID --output ./received.pdf
+line download "Alice" --message IMAGE_MESSAGE_ID --output ./photo.jpg
 ```
 
 使用 `line COMMAND --help` 查看各指令的選項與範例。
@@ -209,7 +211,8 @@ LINE CLI 採用 LINE Chrome 類型的通訊協定。伺服器端的變更可能�
 - QR 登入為實驗功能，不支援已關閉 Letter Sealing 的帳號。
 - LINE 會管理 Chrome 類型工作階段的有效期限，工作階段可能在約 168 小時（7 天）後到期。CLI 不會依本機經過的時間讓工作階段失效；它會在可行時更新權杖，若驗證遭拒則提示使用 `line login`。詳見[工作階段到期說明](CLI.md#session-expiration)與[無頭服務部署](CLI.md#run-unattended)。
 - 只能讀取近期記錄，每次最多 100 則訊息
-- 僅支援一般檔案傳輸，不支援貼圖或特殊媒體訊息
+- 傳送僅支援一般檔案，不支援貼圖或特殊媒體訊息傳送
+- 媒體下載上限為 20 MiB，不支援外部媒體網址
 - 讀取訊息不會將訊息標示為已讀
 - 部分通訊協定流程仍需更廣泛的實際環境驗證
 

@@ -387,3 +387,23 @@ func TestWatchWaitsForBusySessionAndPreservesConcurrentSequence(t *testing.T) {
 		t.Fatal("checkpoint clobbered concurrent session update")
 	}
 }
+
+func TestWatchReportsMediaWithoutExposingEncryptionMetadata(t *testing.T) {
+	for _, kind := range []int{1, 2, 3, 14, 7} {
+		w, f, _, out := setup(t)
+		message := &line.Message{ID: "123", From: "u-peer", To: "u-self", ContentType: kind, Text: "private payload", Chunks: []string{"private ciphertext"}, ContentMetadata: map[string]string{"e2eeVersion": "2", "ENC_KM": "private key", "OID": "private oid"}}
+		event, _ := json.Marshal(map[string]any{"revision": "11", "type": 26, "message": message})
+		f.streams = []stream{{frames: []frame{{"operation", string(event)}}}}
+		if err := w.Run(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		events := outputEvents(t, out)
+		want := "attachment"
+		if kind == 7 {
+			want = "unsupported"
+		}
+		if len(events) != 1 || events[0].Message.Status != want || !events[0].Message.Encrypted || strings.Contains(out.String(), "private") {
+			t.Fatalf("unsafe media event: %s", out)
+		}
+	}
+}
