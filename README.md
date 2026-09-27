@@ -217,7 +217,7 @@ compatibility.
 
 - One saved account per OS user
 - QR login is experimental. QR login with Letter Sealing disabled is not supported.
-- LINE controls Chrome-style session expiration, which can occur after about 168 hours (7 days). The CLI does not expire sessions based on local age; it refreshes tokens when possible and gives actionable `line login` guidance when authentication is rejected. See [session expiration](CLI.md#session-expiration) and [headless service deployment](CLI.md#run-unattended).
+- The normal approximately 168-hour (7-day) access-token boundary is handled by automatic V3 refresh, including after a restart. Manual login is needed only when refresh credentials cannot recover access or LINE explicitly invalidates the session. See [token refresh and session invalidation](CLI.md#token-refresh-and-session-invalidation) and [headless service deployment](CLI.md#run-unattended).
 - Recent history only, up to 100 messages per read
 - Sending supports generic files only; no stickers or specialized media sending
 - Media downloads are limited to 20 MiB; external media URLs are unsupported

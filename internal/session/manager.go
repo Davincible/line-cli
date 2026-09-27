@@ -5,7 +5,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
-	"strconv"
+	"sync"
 	"time"
 
 	"github.com/kongesque/line-cli/pkg/e2ee"
@@ -44,6 +44,10 @@ type API interface {
 }
 
 type Manager struct {
+	// Commands also hold the process lock. This serializes callers sharing a manager.
+	mu   sync.Mutex
+	Wait func(context.Context, time.Duration) error
+
 	Store      Store
 	Storage    StoragePreparer
 	NewClient  func(string) API
@@ -182,8 +186,7 @@ func (m *Manager) finishLogin(ctx context.Context, email, token string, noE2EE b
 		return nil, errors.New("login profile does not match the approved account")
 	}
 	if res.TokenV3IssueResult != nil {
-		s.RefreshToken = res.TokenV3IssueResult.RefreshToken
-		s.RefreshAt = refreshAt(m.Now(), res.TokenV3IssueResult)
+		s.applyToken(m.Now(), res.TokenV3IssueResult)
 	}
 	if !noE2EE {
 		if res.E2EEPublicKey == "" || res.EncryptedKeyChain == "" {
@@ -234,29 +237,27 @@ func exportKeys(ctx context.Context, api API, res *line.LoginResult) (map[string
 	return mgr.InitFromLoginKeyChain(res.E2EEPublicKey, res.EncryptedKeyChain)
 }
 
-func refreshAt(now time.Time, token *line.TokenV3IssueResult) time.Time {
-	seconds, err := strconv.ParseInt(token.DurationUntilRefreshSec, 10, 64)
-	if err != nil || seconds <= 0 || seconds > 365*24*60*60 {
-		return time.Time{}
-	}
-	if seconds > 60 {
-		seconds -= 30
-	}
-	return now.Add(time.Duration(seconds) * time.Second)
-}
-
 // Do is for read-only calls. The caller must hold Lock across the whole command.
 func (m *Manager) Do(call func(API) error) error {
-	return m.do(call, true)
+	return m.DoContext(context.Background(), call)
 }
 
-// Mutate refreshes expired credentials before the call but never replays it.
+func (m *Manager) DoContext(ctx context.Context, call func(API) error) error {
+	return m.do(ctx, call, true)
+}
+
+// Mutate refreshes credentials but never replays the operation, even on auth errors.
 // A lost response may mean the server already accepted the mutation.
 func (m *Manager) Mutate(call func(API) error) error {
-	return m.do(call, false)
+	return m.do(context.Background(), call, false)
 }
 
-func (m *Manager) do(call func(API) error, retry bool) error {
+func (m *Manager) do(ctx context.Context, call func(API) error, retry bool) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	s, err := m.Store.Load()
 	if err != nil {
 		return err
@@ -266,23 +267,55 @@ func (m *Manager) do(call func(API) error, retry bool) error {
 	}
 	api := m.NewClient(s.AccessToken)
 	refreshed := false
-	if s.RefreshToken != "" && !s.RefreshAt.IsZero() && !m.Now().Before(s.RefreshAt) {
-		api, err = m.refresh(s, api)
+	if s.RefreshToken != "" && !s.RefreshDeadline().IsZero() && !m.Now().Before(s.RefreshDeadline()) {
+		api, err = m.refresh(ctx, s, api)
 		if err != nil {
 			return err
 		}
 		refreshed = true
 	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	err = call(api)
 	if err == nil {
 		return nil
 	}
-	if line.IsLoggedOut(err) {
-		return m.invalidate(s)
-	}
-	if retry && !refreshed && line.IsAuthError(err) && s.RefreshToken != "" {
-		api, err = m.refresh(s, api)
-		if err != nil {
+	if line.IsAuthError(err) {
+		original := err
+		// Source-aware recovery also protects against a response from a stale client.
+		current, loadErr := m.Store.Load()
+		if loadErr != nil {
+			return loadErr
+		}
+		if current.Generation != s.Generation {
+			return ErrSessionChanged
+		}
+		if current.Invalidated {
+			return ErrSessionInvalidated
+		}
+		stale := current.AccessToken != s.AccessToken || current.RefreshToken != s.RefreshToken
+		if !stale && line.IsLoggedOut(err) {
+			return m.invalidate(s)
+		}
+		if stale {
+			s = current
+			api = m.NewClient(s.AccessToken)
+		} else if !refreshed && s.RefreshToken != "" {
+			api, err = m.refresh(ctx, s, api)
+			if err != nil {
+				return err
+			}
+		} else {
+			if s.RefreshToken == "" {
+				return remoteError("refresh unavailable", original)
+			}
+			return remoteError("request", original)
+		}
+		if !retry {
+			return remoteError("mutation (not replayed)", original)
+		}
+		if err := ctx.Err(); err != nil {
 			return err
 		}
 		err = call(api)
@@ -293,30 +326,18 @@ func (m *Manager) do(call func(API) error, retry bool) error {
 	return remoteError("request", err)
 }
 
-func (m *Manager) refresh(s *State, api API) (API, error) {
-	token, err := api.RefreshAccessToken(s.RefreshToken)
-	if line.IsLoggedOut(err) {
-		return nil, m.invalidate(s)
-	}
+func (m *Manager) invalidate(failed *State) error {
+	s, err := m.Store.Load()
 	if err != nil {
-		return nil, remoteError("token refresh", err)
+		return err
 	}
-	if token == nil || token.AccessToken == "" {
-		return nil, errors.New("LINE returned an empty refresh token response; run line login")
+	if s.Generation != failed.Generation {
+		return ErrSessionChanged
 	}
-	s.AccessToken = token.AccessToken
-	if token.RefreshToken != "" {
-		s.RefreshToken = token.RefreshToken
+	if s.AccessToken != failed.AccessToken || s.RefreshToken != failed.RefreshToken {
+		// Never write a stale snapshot over rotated credentials or checkpoints.
+		return remoteError("stale client", errors.New("stale authentication response"))
 	}
-	s.RefreshAt = refreshAt(m.Now(), token)
-	// Rotated credentials must reach persistent storage before making requests.
-	if err := m.Store.Save(s); err != nil {
-		return nil, err
-	}
-	return m.NewClient(s.AccessToken), nil
-}
-
-func (m *Manager) invalidate(s *State) error {
 	s.Invalidated = true
 	if err := m.Store.Save(s); err != nil {
 		return err
@@ -324,14 +345,38 @@ func (m *Manager) invalidate(s *State) error {
 	return ErrSessionInvalidated
 }
 
-// MarkLoggedOut invalidates the current session without attempting token refresh.
-// The caller holds Lock and has verified the failing stream used this session.
-func (m *Manager) MarkLoggedOut() error {
+// RecoverStream handles auth errors from an SSE connection under the command lock.
+// Stale streams reconnect using stored credentials without refreshing or invalidating.
+func (m *Manager) RecoverStream(ctx context.Context, generation, accessToken string, cause error) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	s, err := m.Store.Load()
 	if err != nil {
 		return err
 	}
-	return m.invalidate(s)
+	if s.Generation != generation {
+		return ErrSessionChanged
+	}
+	if s.Invalidated {
+		return ErrSessionInvalidated
+	}
+	if s.AccessToken != accessToken {
+		return nil
+	}
+	if line.IsLoggedOut(cause) {
+		return m.invalidate(s)
+	}
+	if !line.IsAuthError(cause) {
+		return remoteError("stream", cause)
+	}
+	if s.RefreshToken == "" {
+		return remoteError("refresh unavailable", cause)
+	}
+	_, err = m.refresh(ctx, s, m.NewClient(s.AccessToken))
+	return err
 }
 
 func remoteError(action string, err error) error {
@@ -350,8 +395,17 @@ type RemoteError struct {
 
 func (e *RemoteError) Error() string {
 	if line.IsAuthError(e.cause) {
-		if e.Action == "request" || e.Action == "token refresh" {
-			return fmt.Sprintf("LINE %s requires authentication; the session may have expired or been invalidated. Chrome-style sessions can expire after about 168 hours (7 days). Run line login to authenticate again", e.Action)
+		if e.Action == "token refresh" {
+			return "LINE rejected token refresh; saved credentials were retained. Retry later or run line login if rejection persists"
+		}
+		if e.Action == "mutation (not replayed)" {
+			return "LINE mutation was not replayed after an authentication failure; current credentials were saved. Check LINE before trying again"
+		}
+		if e.Action == "refresh unavailable" {
+			return "LINE request requires authentication; no refresh token is stored to recover access; run line login"
+		}
+		if e.Action == "request" {
+			return fmt.Sprintf("LINE %s requires access-token refresh; credentials were retained", e.Action)
 		}
 		return fmt.Sprintf("LINE %s requires authentication; run line login", e.Action)
 	}
@@ -371,6 +425,8 @@ func ProtocolError(err error) error {
 // ReserveSequence writes before the network send and is never rolled back.
 // Caller must hold Lock. Keep request IDs in LINE's signed 32-bit range.
 func (m *Manager) ReserveSequence() (int64, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	s, err := m.Store.Load()
 	if err != nil {
 		return 0, err

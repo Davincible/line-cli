@@ -407,3 +407,71 @@ func TestWatchReportsMediaWithoutExposingEncryptionMetadata(t *testing.T) {
 		}
 	}
 }
+
+func TestWatchRefreshesSSEAuthEvenWhenTalkProbeSucceeds(t *testing.T) {
+	for _, failure := range []stream{
+		{err: errors.New(`SSE error: 401`)},
+		{err: errors.New(`SSE error: 403`)},
+		{frames: []frame{{"error", `{"code":10051,"data":{"name":"TalkException","code":119}}`}}},
+	} {
+		w, f, s, _ := setup(t)
+		s.state.RefreshToken = "original-refresh"
+		f.streams = []stream{failure, {frames: []frame{{"operation", incoming}}}}
+		w.Manager.NewClient = func(token string) session.API {
+			if token == "rotated" && (s.state.AccessToken != "rotated" || s.state.RefreshToken != "refresh-new" || s.state.DurationUntilRefreshSec != "3600") {
+				t.Fatal("stream restarted before complete token persistence")
+			}
+			return f
+		}
+		if err := w.Run(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		if f.refreshes != 1 || len(f.revisions) != 2 || s.state.Invalidated {
+			t.Fatal("SSE auth error did not refresh and reconnect")
+		}
+	}
+}
+
+func TestWatchReconnectsAtRefreshDeadline(t *testing.T) {
+	w, f, s, _ := setup(t)
+	now := time.Unix(1000, 0)
+	w.Manager.Now = func() time.Time { return now }
+	s.state.RefreshToken = "refresh"
+	s.state.RefreshAt = now.Add(5 * time.Millisecond)
+	w.ProbeInterval = time.Hour
+	f.onListen = func(ctx context.Context, cb func(string, string)) error {
+		if len(f.revisions) == 1 {
+			deadline, ok := ctx.Deadline()
+			if !ok || time.Until(deadline) > time.Second {
+				t.Fatal("stream lifetime ignored refresh deadline")
+			}
+			<-ctx.Done()
+			now = now.Add(5 * time.Millisecond)
+			return ctx.Err()
+		}
+		if s.state.AccessToken != "rotated" {
+			t.Fatal("old token used after refresh deadline")
+		}
+		cb("operation", incoming)
+		return nil
+	}
+	if err := w.Run(context.Background()); err != nil || f.refreshes != 1 {
+		t.Fatal("scheduled SSE rotation failed", err)
+	}
+}
+
+func TestWatchBoundsConsecutiveAuthRecovery(t *testing.T) {
+	for _, terminal := range []bool{false, true} {
+		w, f, s, _ := setup(t)
+		s.state.RefreshToken = "refresh"
+		second := errors.New(`{"code":119}`)
+		if terminal {
+			second = errors.New("V3_TOKEN_CLIENT_LOGGED_OUT")
+		}
+		f.streams = []stream{{err: errors.New(`{"code":119}`)}, {err: second}}
+		err := w.Run(context.Background())
+		if err == nil || f.refreshes != 1 || len(f.revisions) != 2 || s.state.Invalidated != terminal {
+			t.Fatal("repeated SSE auth error retried refresh or misclassified logout", err)
+		}
+	}
+}

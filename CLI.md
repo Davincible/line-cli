@@ -642,25 +642,42 @@ exits 143. Other CLI and network errors use status 1. `auth status --json` still
 writes its status object when storage is unavailable, then returns the matching
 nonzero status.
 
-### Session expiration
+### Token refresh and session invalidation
 
-LINE controls the lifetime of Chrome-style sessions, which can expire after
-about 168 hours (7 days). The CLI does not impose a seven-day local expiration:
-it continues using accepted credentials and uses LINE's token refresh schedule
-when provided. A refresh boundary is not itself a terminal session expiration.
+The normal approximately 168-hour (7-day) boundary is an access-token refresh
+boundary, not a fixed session lifetime. With a valid stored refresh token, the
+CLI refreshes automatically without manual login, including after a restart.
+It uses LINE's token issue time plus refresh duration, with a 30-second safety
+margin (half the lifetime for very short-lived tokens). Older saved sessions
+without issue metadata keep their existing deadline and can recover at runtime.
 
-When LINE returns a terminal authentication signal such as `REQUEST_NEED_LOGIN`
-or `V3_TOKEN_CLIENT_LOGGED_OUT`, the CLI stops using the session and asks you to
-run `line login`. These signals do not uniquely distinguish expiration from
-replacement by another Chrome client, so the diagnostic says the session
-"expired or was invalidated". Failed authentication during token refresh also
-provides expiration context and the re-login command, without exposing the
-server response. Network failures remain connection errors.
+Access and refresh tokens, server timing, and any refresh retry policy are saved
+in one storage commit before another request uses the new access token. A missing
+refresh token in a successful refresh response retains the previous refresh token.
+Transient refresh failures use bounded exponential backoff and jitter: at most
+four attempts, with each delay capped at 30 seconds. Authentication rejections,
+malformed responses, and storage failures are not retried by that loop.
 
-Read-only requests can recover authentication with one refresh and retry.
-Remote mutations are never replayed automatically. Successful login replaces the
-invalidated session and restores authenticated commands. `auth status --check`
-only checks local storage access; it does not verify LINE session validity.
+Read-only requests can recover authentication with one refresh and one replay.
+Remote mutations are never replayed automatically; credentials may be refreshed
+for subsequent work, but check LINE before repeating a send, reaction, unsend,
+or upload whose result is uncertain. `line watch` reconnects at the refresh
+deadline or after a stream authentication error, using committed credentials.
+Errors from an older stream cannot invalidate a newer token or login.
+
+Only explicit server logout signals such as `REQUEST_NEED_LOGIN`,
+`V3_TOKEN_CLIENT_LOGGED_OUT`, or an unauthorized-device response invalidate the
+saved session. These signals do not always reveal whether another client replaced
+the session. Access-token expiry, generic HTTP 401/403, refresh rejection, and
+network failures alone do not mark it invalid. A rejected refresh retains the
+saved credentials; persistent rejection or a missing refresh token may require
+`line login`. A storage failure after server-side rotation stops further requests;
+local storage cannot guarantee recovery of a rotated token it could not commit.
+
+Successful login replaces an invalidated session. `auth status --check` checks
+local storage access only; it does not verify LINE session validity. See the
+[token/session audit](TOKEN_SESSION.md) for implementation evidence
+and call-path coverage.
 
 ### Log out
 

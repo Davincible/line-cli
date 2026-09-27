@@ -405,12 +405,14 @@ func (c *Client) callRPCWithBaseURLContext(ctx context.Context, baseURL, service
 	}
 	defer resp.Body.Close()
 
-	respBody, _ := io.ReadAll(resp.Body)
-
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("API error %d: %s", resp.StatusCode, string(respBody))
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read LINE response: %w", err)
 	}
-
+	if err := responseError(resp.StatusCode, respBody); err != nil && (resp.StatusCode != 200 || IsAuthError(err)) {
+		return nil, err
+	}
+	// Non-authentication envelopes retain the method-specific capability handling.
 	return respBody, nil
 }
 
@@ -456,7 +458,11 @@ func (c *Client) ConfirmE2EELogin(verifier, serverPublicKeyB64, encryptedKeyChai
 // postWithHMAC is a small helper for non-standard RPC endpoints that still expect
 // the same headers and HMAC signature as the Talk endpoints.
 func (c *Client) postWithHMAC(fullURL string, body []byte) ([]byte, error) {
-	req, err := http.NewRequest("POST", fullURL, bytes.NewBuffer(body))
+	return c.postWithHMACContext(context.Background(), fullURL, body)
+}
+
+func (c *Client) postWithHMACContext(ctx context.Context, fullURL string, body []byte) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, "POST", fullURL, bytes.NewBuffer(body))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -489,20 +495,26 @@ func (c *Client) postWithHMAC(fullURL string, body []byte) ([]byte, error) {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != 200 {
-		respBody, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(respBody))
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read LINE response: %w", err)
 	}
-
-	return io.ReadAll(resp.Body)
+	if err := responseError(resp.StatusCode, respBody); err != nil {
+		return nil, err
+	}
+	return respBody, nil
 }
 
 func (c *Client) RefreshAccessToken(refreshToken string) (*TokenV3IssueResult, error) {
+	return c.RefreshAccessTokenContext(context.Background(), refreshToken, 0)
+}
+
+func (c *Client) RefreshAccessTokenContext(ctx context.Context, refreshToken string, retryCount int) (*TokenV3IssueResult, error) {
 	url := "https://line-chrome-gw.line-apps.com/api/auth/tokenRefresh"
 
 	reqBody := RefreshAccessTokenRequest{
 		RefreshToken: refreshToken,
-		RetryCount:   0,
+		RetryCount:   retryCount,
 	}
 
 	bodyBytes, err := json.Marshal(reqBody)
@@ -510,7 +522,7 @@ func (c *Client) RefreshAccessToken(refreshToken string) (*TokenV3IssueResult, e
 		return nil, fmt.Errorf("failed to marshal refresh request: %w", err)
 	}
 
-	respBytes, err := c.postWithHMAC(url, bodyBytes)
+	respBytes, err := c.postWithHMACContext(ctx, url, bodyBytes)
 	if err != nil {
 		return nil, err
 	}
@@ -527,10 +539,10 @@ func (c *Client) RefreshAccessToken(refreshToken string) (*TokenV3IssueResult, e
 	// access token and the client would silently go into a "not logged in"
 	// state on the next API call.
 	if res.AccessToken == "" {
-		return nil, fmt.Errorf("refresh response missing access token: %s", string(respBytes))
+		return nil, errors.New("refresh response missing access token")
 	}
 
-	c.AccessToken = res.AccessToken
+	// The session owner publishes credentials only after persistence.
 
 	return &res, nil
 }

@@ -467,3 +467,16 @@ func TestQRURLRejectsPreexistingKeyParameters(t *testing.T) {
 		}
 	}
 }
+
+func TestQRLoginPersistsServerRefreshMetadata(t *testing.T) {
+	m, s, f, _ := qrTestManager(t)
+	token := f.result.TokenV3IssueResult
+	token.TokenIssueTimeEpochSec = "900"
+	token.RefreshApiRetryPolicy = &line.RefreshApiRetryPolicy{InitialDelayInMillis: "500", MaxDelayInMillis: "10000", Multiplier: 2, JitterRate: 0.2}
+	if _, err := m.LoginQR(context.Background(), ignoreQREvent); err != nil {
+		t.Fatal(err)
+	}
+	if s.state.TokenIssueTimeEpochSec != "900" || s.state.DurationUntilRefreshSec != "3600" || !s.state.RefreshAt.Equal(time.Unix(4470, 0)) || s.state.RefreshApiRetryPolicy == nil || *s.state.RefreshApiRetryPolicy != *token.RefreshApiRetryPolicy {
+		t.Fatal("QR token metadata lost")
+	}
+}

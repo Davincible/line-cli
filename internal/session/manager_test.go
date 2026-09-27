@@ -220,10 +220,10 @@ func TestDoBoundsRefreshRetries(t *testing.T) {
 
 func TestMutateNeverReplaysAnAuthFailure(t *testing.T) {
 	s := &memoryStore{state: &State{AccessToken: "old", RefreshToken: "refresh"}}
-	f := &fakeAPI{}
+	f := &fakeAPI{refreshResult: &line.TokenV3IssueResult{AccessToken: "new"}}
 	calls := 0
 	err := testManager(s, f).Mutate(func(API) error { calls++; return errors.New(`{"code":119}`) })
-	if err == nil || calls != 1 || f.refreshCalls != 0 {
+	if err == nil || calls != 1 || f.refreshCalls != 1 || s.state.AccessToken != "new" {
 		t.Fatal("mutation was replayed")
 	}
 }
@@ -293,7 +293,7 @@ func TestServerSessionRejectionAndRelogin(t *testing.T) {
 			}
 			calls := 0
 			err := call(func(API) error { calls++; return errors.New(response) })
-			if !errors.Is(err, ErrSessionInvalidated) || !strings.Contains(err.Error(), "168 hours") || !strings.Contains(err.Error(), "line login") || strings.Contains(err.Error(), "synthetic-secret") {
+			if !errors.Is(err, ErrSessionInvalidated) || strings.Contains(err.Error(), "168 hours") || !strings.Contains(err.Error(), "line login") || strings.Contains(err.Error(), "synthetic-secret") {
 				t.Fatal("missing safe expiration guidance", err)
 			}
 			if calls != 1 || f.refreshCalls != 0 || !s.state.Invalidated {
@@ -315,7 +315,7 @@ func TestServerSessionRejectionAndRelogin(t *testing.T) {
 	}
 }
 
-func TestRefreshRejectionHasExpiryGuidanceWithoutLeakingBody(t *testing.T) {
+func TestRefreshRejectionRetainsCredentialsWithoutLeakingBody(t *testing.T) {
 	for _, scheduled := range []bool{false, true} {
 		s := &memoryStore{state: &State{AccessToken: "old", RefreshToken: "refresh"}}
 		if scheduled {
@@ -328,7 +328,7 @@ func TestRefreshRejectionHasExpiryGuidanceWithoutLeakingBody(t *testing.T) {
 		if scheduled {
 			wantCalls = 0
 		}
-		if err == nil || !strings.Contains(err.Error(), "168 hours") || !strings.Contains(err.Error(), "line login") || strings.Contains(err.Error(), "synthetic-secret") || calls != wantCalls || f.refreshCalls != 1 {
+		if err == nil || strings.Contains(err.Error(), "168 hours") || !strings.Contains(err.Error(), "line login") || strings.Contains(err.Error(), "synthetic-secret") || calls != wantCalls || f.refreshCalls != 1 {
 			t.Fatal("unsafe or unbounded refresh rejection", err)
 		}
 		if s.state.AccessToken != "old" || s.saves != 0 {

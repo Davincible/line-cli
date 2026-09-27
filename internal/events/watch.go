@@ -88,10 +88,11 @@ func (w *Watcher) Run(ctx context.Context) error {
 	encoder := json.NewEncoder(w.Out)
 	backoff := time.Second
 	count := 0
-	profileProbe := false
+	var recoveredStreamToken string
 	for {
 		var api session.API
 		var streamToken string
+		streamLifetime := w.ProbeInterval
 		err := w.locked(ctx, func() error {
 			s, err := w.state(generation)
 			if err != nil {
@@ -107,12 +108,7 @@ func (w *Watcher) Run(ctx context.Context) error {
 			// A Talk probe exposes forced logout even if SSE remains connected or
 			// returns only HTTP 401. Manager persists refreshed tokens before use.
 			var latest int64
-			if err := w.Manager.Do(func(client session.API) (err error) {
-				if profileProbe {
-					if _, err = client.GetProfileContext(ctx); err != nil {
-						return err
-					}
-				}
+			if err := w.Manager.DoContext(ctx, func(client session.API) (err error) {
 				latest, err = client.GetLastOpRevisionContext(ctx)
 				return
 			}); err != nil {
@@ -138,6 +134,10 @@ func (w *Watcher) Run(ctx context.Context) error {
 			}
 			api = w.Manager.NewClient(s.AccessToken)
 			streamToken = s.AccessToken
+			if deadline := s.RefreshDeadline(); s.RefreshToken != "" && !deadline.IsZero() {
+				until := deadline.Sub(w.Manager.Now())
+				streamLifetime = min(streamLifetime, max(until, time.Millisecond))
+			}
 			if decoder == nil {
 				decoder, err = messaging.New(w.Manager)
 			}
@@ -157,8 +157,7 @@ func (w *Watcher) Run(ctx context.Context) error {
 			backoff = min(backoff*2, 30*time.Second)
 			continue
 		}
-		profileProbe = false
-		streamCtx, cancel := context.WithTimeout(ctx, w.ProbeInterval)
+		streamCtx, cancel := context.WithTimeout(ctx, streamLifetime)
 		var callbackErr error
 		var eventError error
 		received := false
@@ -167,6 +166,7 @@ func (w *Watcher) Run(ctx context.Context) error {
 				return
 			}
 			if kind == "ping" || kind == "connInfoRevision" {
+				recoveredStreamToken = ""
 				return
 			}
 			if kind == "error" {
@@ -204,6 +204,7 @@ func (w *Watcher) Run(ctx context.Context) error {
 				revision = next
 				count++
 				received = true
+				recoveredStreamToken = ""
 				return nil
 			})
 			if callbackErr != nil || (w.Limit > 0 && count >= w.Limit) {
@@ -224,26 +225,50 @@ func (w *Watcher) Run(ctx context.Context) error {
 		if eventError != nil {
 			streamErr = eventError
 		}
-		if line.IsLoggedOut(streamErr) {
+		if line.IsAuthError(streamErr) {
 			err := w.locked(ctx, func() error {
 				s, err := w.state(generation)
 				if err != nil {
 					return err
 				}
-				// Another command may have rotated credentials during the stream.
-				// An old transport must never invalidate the newer token.
 				if s.AccessToken != streamToken {
 					return nil
 				}
-				return w.Manager.MarkLoggedOut()
+				if recoveredStreamToken == streamToken && !line.IsLoggedOut(streamErr) {
+					return errors.New("LINE stream authentication failed after token refresh; saved credentials were retained; retry line watch")
+				}
+				// A generic SSE 401/403 may hide an explicit forced logout. Probe once
+				// before recovery; a successful probe must not mask SSE refresh-required.
+				if !line.IsLoggedOut(streamErr) && !line.IsRefreshRequired(streamErr) {
+					if err := w.Manager.DoContext(ctx, func(client session.API) error {
+						_, err := client.GetProfileContext(ctx)
+						return err
+					}); err != nil {
+						return err
+					}
+				}
+				if err := w.Manager.RecoverStream(ctx, generation, streamToken, streamErr); err != nil {
+					return err
+				}
+				current, err := w.state(generation)
+				if err == nil {
+					recoveredStreamToken = current.AccessToken
+				}
+				return err
 			})
 			if err != nil {
-				return err
+				var remote *session.RemoteError
+				if !errors.As(err, &remote) || line.IsAuthError(session.ProtocolError(err)) {
+					return err
+				}
+				if err := w.retry(ctx, backoff); err != nil {
+					return err
+				}
+				backoff = min(backoff*2, 30*time.Second)
 			}
 			continue
 		}
-		profileProbe = line.IsAuthError(streamErr)
-		if eventError != nil && !profileProbe {
+		if eventError != nil {
 			return errors.New("LINE reported a stream error; restart line watch")
 		}
 		if probeDue {

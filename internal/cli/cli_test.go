@@ -162,7 +162,7 @@ func TestWhoamiRejectedSessionHasSafeReloginGuidance(t *testing.T) {
 			args = append(args, "--json")
 		}
 		err := a.Run(args)
-		if err == nil || !strings.Contains(err.Error(), "session expired or was invalidated") || !strings.Contains(err.Error(), "168 hours") || !strings.Contains(err.Error(), "line login") || strings.Contains(err.Error(), "synthetic-secret") || out.Len() != 0 {
+		if err == nil || !strings.Contains(err.Error(), "session was invalidated") || strings.Contains(err.Error(), "168 hours") || !strings.Contains(err.Error(), "line login") || strings.Contains(err.Error(), "synthetic-secret") || out.Len() != 0 {
 			t.Fatal("missing safe re-login guidance or contaminated stdout", err)
 		}
 	}

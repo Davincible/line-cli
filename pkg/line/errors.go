@@ -1,9 +1,13 @@
 package line
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net"
 	"strconv"
 	"strings"
 )
@@ -26,7 +30,7 @@ func IsE2EEDisabled(err error) bool {
 	if errors.Is(err, ErrE2EEDisabled) {
 		return true
 	}
-	msg := err.Error()
+	msg := protocolMessage(err)
 	start := strings.IndexByte(msg, '{')
 	if start < 0 {
 		return false
@@ -48,16 +52,19 @@ func IsRefreshRequired(err error) bool {
 	if err == nil {
 		return false
 	}
-	msg := strings.ToLower(err.Error())
-	return strings.Contains(msg, "\"code\":119") ||
-		strings.Contains(msg, "access token refresh required")
+	msg := strings.ToLower(protocolMessage(err))
+	return hasJSONCode(msg, 119) ||
+		strings.Contains(msg, "access token refresh required") ||
+		strings.Contains(msg, "must_refresh_v3_token") || isExceptionCode(err, "TokenAuthException", 4)
 }
 
 func IsLoggedOut(err error) bool {
 	if err == nil {
 		return false
 	}
-	return strings.Contains(err.Error(), "V3_TOKEN_CLIENT_LOGGED_OUT") ||
+	return strings.Contains(strings.ToUpper(protocolMessage(err)), "V3_TOKEN_CLIENT_LOGGED_OUT") ||
+		isExceptionCode(err, "TalkException", 8) ||
+		isExceptionCode(err, "TokenAuthException", 3) ||
 		IsInvalidSenderKey(err) ||
 		IsRequestNeedLogin(err)
 }
@@ -66,10 +73,10 @@ func IsInvalidSenderKey(err error) bool {
 	if err == nil {
 		return false
 	}
-	msg := strings.ToLower(err.Error())
+	msg := strings.ToLower(protocolMessage(err))
 	return hasResponseErrorCode(msg) &&
 		strings.Contains(msg, "talkexception") &&
-		strings.Contains(msg, "\"code\":83") &&
+		hasJSONCode(msg, 83) &&
 		strings.Contains(msg, "invalid sender key")
 }
 
@@ -77,7 +84,7 @@ func IsRequestNeedLogin(err error) bool {
 	if err == nil {
 		return false
 	}
-	msg := strings.ToLower(err.Error())
+	msg := strings.ToLower(protocolMessage(err))
 	return strings.Contains(msg, "request_need_login") ||
 		hasJSONCode(msg, 10004)
 }
@@ -86,7 +93,11 @@ func IsUnauthorizedStatus(err error) bool {
 	if err == nil {
 		return false
 	}
-	msg := strings.ToLower(err.Error())
+	var response *ResponseError
+	if errors.As(err, &response) && (response.Status == 401 || response.Status == 403) {
+		return true
+	}
+	msg := strings.ToLower(protocolMessage(err))
 	return strings.Contains(msg, "api error 401") ||
 		strings.Contains(msg, "api error 403") ||
 		strings.Contains(msg, "http 401") ||
@@ -102,7 +113,8 @@ func IsUnauthorizedStatus(err error) bool {
 }
 
 func IsAuthError(err error) bool {
-	return IsRefreshRequired(err) || IsLoggedOut(err) || IsUnauthorizedStatus(err)
+	return IsRefreshRequired(err) || IsLoggedOut(err) || IsUnauthorizedStatus(err) ||
+		isExceptionCode(err, "TokenAuthException", 1) || isExceptionCode(err, "TokenAuthException", 2)
 }
 
 // IsGroupKeyNotFound returns true when the error is specifically code 5 "not found"
@@ -117,7 +129,7 @@ func IsGroupKeyNotFound(err error) bool {
 	if errors.Is(err, ErrGroupKeyNotFound) {
 		return true
 	}
-	msg := strings.ToLower(err.Error())
+	msg := strings.ToLower(protocolMessage(err))
 	if strings.Contains(msg, "group key not found: not found") {
 		return true
 	}
@@ -136,7 +148,7 @@ func IsNoUsableE2EEGroupKey(err error) bool {
 	if errors.Is(err, ErrNoUsableE2EEGroupKey) {
 		return true
 	}
-	msg := strings.ToLower(err.Error())
+	msg := strings.ToLower(protocolMessage(err))
 	if strings.Contains(msg, "no group key found") ||
 		strings.Contains(msg, "no group shared key returned") {
 		return true
@@ -170,7 +182,7 @@ func IsTalkExceptionNotFound(err error) bool {
 	if err == nil {
 		return false
 	}
-	msg := strings.ToLower(err.Error())
+	msg := strings.ToLower(protocolMessage(err))
 	return hasResponseErrorCode(msg) &&
 		strings.Contains(msg, "talkexception") &&
 		(strings.Contains(msg, "\"code\":5,") ||
@@ -185,7 +197,7 @@ func IsNotAMemberError(err error) bool {
 	if err == nil {
 		return false
 	}
-	msg := strings.ToLower(err.Error())
+	msg := strings.ToLower(protocolMessage(err))
 	return hasResponseErrorCode(msg) &&
 		strings.Contains(msg, "talkexception") &&
 		strings.Contains(msg, "\"code\":10,") &&
@@ -196,7 +208,7 @@ func IsInvalidPaidReactionType(err error) bool {
 	if err == nil {
 		return false
 	}
-	msg := strings.ToLower(err.Error())
+	msg := strings.ToLower(protocolMessage(err))
 	return hasResponseErrorCode(msg) &&
 		strings.Contains(msg, "invalid paidreactiontype in reactiontype")
 }
@@ -247,4 +259,78 @@ func parseE2EEGroupKeyError(method, message string, rawData json.RawMessage) err
 		return fmt.Errorf("%w: %w: %s", ErrNoUsableE2EEGroupKey, ErrE2EEDisabled, talk.Reason)
 	}
 	return fmt.Errorf("%s failed: %s", method, message)
+}
+
+// ResponseError retains protocol evidence privately; its printable form never
+// exposes server bodies, which may include credentials or message contents.
+type ResponseError struct {
+	Status int
+	code   int
+	body   string
+}
+
+func (e *ResponseError) Error() string {
+	return fmt.Sprintf("LINE response error (HTTP %d, code %d)", e.Status, e.code)
+}
+
+func responseError(status int, body []byte) error {
+	var envelope struct {
+		Code int `json:"code"`
+	}
+	_ = json.Unmarshal(body, &envelope)
+	if status == 200 && envelope.Code == 0 {
+		return nil
+	}
+	return &ResponseError{Status: status, code: envelope.Code, body: string(body)}
+}
+
+func protocolMessage(err error) string {
+	var response *ResponseError
+	var msg string
+	if errors.As(err, &response) {
+		msg = response.body
+	} else {
+		msg = err.Error()
+	}
+	// Normalize insignificant JSON whitespace before inspecting protocol codes.
+	if start := strings.IndexByte(msg, '{'); start >= 0 {
+		var compact bytes.Buffer
+		if json.Compact(&compact, []byte(msg[start:])) == nil {
+			return msg[:start] + compact.String()
+		}
+	}
+	return msg
+}
+
+// IsTransientError is used only for token refresh. Mutations never use it.
+func IsTransientError(err error) bool {
+	if err == nil || errors.Is(err, context.Canceled) || IsAuthError(err) {
+		return false
+	}
+	var response *ResponseError
+	if errors.As(err, &response) {
+		return response.Status == 408 || response.Status == 429 || response.Status >= 500 && response.Status <= 599
+	}
+	var network net.Error
+	return errors.As(err, &network) || errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF)
+}
+
+// Service codes are meaningful only in their exception namespace. Gateway
+// RESPONSE_ERROR (10051) alone is not an authentication failure.
+func isExceptionCode(err error, name string, code int) bool {
+	if err == nil {
+		return false
+	}
+	msg := protocolMessage(err)
+	start := strings.IndexByte(msg, '{')
+	if start < 0 {
+		return false
+	}
+	var envelope struct {
+		Data talkExceptionData `json:"data"`
+	}
+	if json.Unmarshal([]byte(msg[start:]), &envelope) != nil {
+		return false
+	}
+	return strings.EqualFold(envelope.Data.Name, name) && envelope.Data.Code == code
 }

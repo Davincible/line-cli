@@ -3,17 +3,23 @@ package session
 import (
 	"errors"
 	"time"
+
+	"github.com/kongesque/line-cli/pkg/line"
 )
 
 var ErrNotFound = errors.New("no saved LINE session; run line login")
 
-// Terminal authentication signals do not distinguish expiration from session
-// replacement. Do not infer expiration from local age.
-var ErrSessionInvalidated = errors.New("LINE session expired or was invalidated. Chrome-style sessions can expire after about 168 hours (7 days), or be replaced by another Chrome client. Run line login to authenticate again")
+// Only an explicit server logout invalidates credentials; token age never does.
+var ErrSessionInvalidated = errors.New("LINE session was invalidated or replaced by another client; run line login")
+var ErrSessionChanged = errors.New("LINE login changed; restart the command")
 
 // State is secret material. Never print it or include it in diagnostic errors.
 // Passwords are deliberately absent: expired refresh credentials require login.
 type State struct {
+	DurationUntilRefreshSec string                      `json:"duration_until_refresh_sec,omitempty"`
+	TokenIssueTimeEpochSec  string                      `json:"token_issue_time_epoch_sec,omitempty"`
+	RefreshApiRetryPolicy   *line.RefreshApiRetryPolicy `json:"refresh_api_retry_policy,omitempty"`
+
 	Generation        string            `json:"generation,omitempty"`
 	WatchRevision     *int64            `json:"watch_revision,omitempty"`
 	Version           int               `json:"version"`
