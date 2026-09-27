@@ -49,7 +49,7 @@ func TestDownloadOBSHonorsOptionalSizeLimit(t *testing.T) {
 		}
 		return obsResponse(http.StatusOK, "12345"), nil
 	})}
-	if _, err := client.DownloadOBSWithSIDOptions(context.Background(), "oid", "123", "emf", OBSDownloadOptions{MaxBytes: 4}); err == nil {
+	if _, err := client.DownloadOBSWithSIDOptions(context.Background(), "oid", "123", "emf", OBSDownloadOptions{MaxBytes: 4}); !errors.Is(err, ErrOBSSizeLimit) {
 		t.Fatal("oversized object accepted")
 	}
 	data, err := client.DownloadOBSWithSIDOptions(context.Background(), "oid", "123", "emf", OBSDownloadOptions{MaxBytes: 5})

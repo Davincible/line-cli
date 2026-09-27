@@ -217,7 +217,7 @@ func TestHistoryNeverExposesCiphertextAsText(t *testing.T) {
 	if strings.Contains(string(data), "raw-secret-response") || strings.Contains(string(data), "misleading") || strings.Contains(string(data), "ciphertext") {
 		t.Fatal("unsafe history output")
 	}
-	if result[0].Status != "decryption_failed" || result[1].Status != "decryption_failed" || result[2].Status != "unsupported" || result[3].Text != "plain hello" {
+	if result[0].Status != "decryption_failed" || result[1].Status != "decryption_failed" || result[2].Status != "attachment" || result[3].Text != "plain hello" {
 		t.Fatal("incorrect message status")
 	}
 }
