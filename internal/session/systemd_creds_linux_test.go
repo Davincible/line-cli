@@ -11,6 +11,7 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -171,5 +172,47 @@ func TestSystemdVersionAndArgumentGates(t *testing.T) {
 		if slices.Contains(args, "--no-ask-password") != (v >= 259) || slices.Contains(args, "--refuse-null") != (v >= 259) {
 			t.Fatal("incorrect version-specific flags")
 		}
+	}
+}
+
+type systemdFileInfo struct {
+	os.FileInfo
+	mode os.FileMode
+	stat *syscall.Stat_t
+}
+
+func (i systemdFileInfo) Mode() os.FileMode { return i.mode }
+func (i systemdFileInfo) IsDir() bool       { return i.mode.IsDir() }
+func (i systemdFileInfo) Sys() any          { return i.stat }
+
+func TestSystemdTrustDiagnosticsPreserveSafety(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		uid        uint32
+		mode       os.FileMode
+		executable bool
+		want       error
+	}{
+		{"trusted helper", 0, 0755, true, nil},
+		{"trusted parent", 0, os.ModeDir | 0755, false, nil},
+		{"unmapped root", 65534, 0755, true, ErrHeadlessHelperTrust},
+		{"user owned parent", 1000, os.ModeDir | 0755, false, ErrHeadlessHelperTrust},
+		{"group writable", 0, 0775, true, ErrHeadlessHelperTrust},
+		{"world writable parent", 0, os.ModeDir | 0777, false, ErrHeadlessHelperTrust},
+		{"not executable", 0, 0644, true, ErrHeadlessUnavailable},
+		{"not regular", 0, os.ModeSymlink | 0755, true, ErrHeadlessUnavailable},
+		{"not directory", 0, 0755, false, ErrHeadlessUnavailable},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateSystemdFile(systemdFileInfo{mode: tc.mode, stat: &syscall.Stat_t{Uid: tc.uid}}, tc.executable)
+			if !errors.Is(err, tc.want) {
+				t.Fatal("incorrect trust classification", err)
+			}
+			if tc.want == ErrHeadlessHelperTrust {
+				if !errors.Is(err, ErrHeadlessUnavailable) || StorageReason(err) != "headless_helper_untrusted" || StorageExitCode(err) != 69 || !strings.Contains(err.Error(), "PrivateUsers") {
+					t.Fatal("trust failure lacks actionable sandbox diagnostic", err)
+				}
+			}
+		})
 	}
 }

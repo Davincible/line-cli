@@ -216,7 +216,7 @@ compatibility.
 
 - One saved account per OS user
 - QR login is experimental: the phone recognized a QR in a user-reported test, but PIN completion, key export, saving, and saved-certificate reuse remain unverified. Use `line login --email ADDRESS` for the existing login flow. QR login with Letter Sealing disabled is not supported.
-- LINE access tokens commonly reach a refresh boundary at around 168 hours (7 days). The CLI refreshes them automatically when possible, but a rejected or invalidated refresh token requires `line login` again.
+- LINE controls Chrome-style session expiration, which can occur after about 168 hours (7 days). The CLI does not expire sessions based on local age; it refreshes tokens when possible and gives actionable `line login` guidance when authentication is rejected. See [session expiration](CLI.md#session-expiration) and [headless service deployment](CLI.md#run-unattended).
 - Recent history only, up to 100 messages per read
 - Generic file transfer only; no stickers or specialized media messages
 - Reading messages does not mark them as read

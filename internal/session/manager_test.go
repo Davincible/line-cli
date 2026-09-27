@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -255,5 +256,83 @@ func TestEmailCompletionCancellationPreservesSession(t *testing.T) {
 	var outcome *LoginError
 	if !errors.Is(err, context.Canceled) || !errors.As(err, &outcome) || !outcome.Approved || s.state.AccessToken != "old" || s.saves != 0 {
 		t.Fatal("email completion failed to honor cancellation", err)
+	}
+}
+
+func TestStoredSessionHasNoLocalLifetime(t *testing.T) {
+	for _, hours := range []int{167, 168, 169, 24 * 365} {
+		t.Run(fmt.Sprint(hours), func(t *testing.T) {
+			s := &memoryStore{state: &State{AccessToken: "accepted", RefreshToken: "refresh"}}
+			f := &fakeAPI{}
+			m := testManager(s, f)
+			start := m.Now()
+			m.Now = func() time.Time { return start.Add(time.Duration(hours) * time.Hour) }
+			calls := 0
+			if err := m.Do(func(API) error { calls++; return nil }); err != nil {
+				t.Fatal(err)
+			}
+			if calls != 1 || f.refreshCalls != 0 || s.saves != 0 || s.state.Invalidated {
+				t.Fatal("locally aged session was refreshed or invalidated without a server instruction")
+			}
+		})
+	}
+}
+
+func TestServerSessionRejectionAndRelogin(t *testing.T) {
+	for _, response := range []string{
+		`API error 400: {"code":10051,"data":{"name":"TalkException","code":8,"reason":"V3_TOKEN_CLIENT_LOGGED_OUT"}}`,
+		`API error 401: {"code":10004,"message":"REQUEST_NEED_LOGIN","private":"synthetic-secret"}`,
+	} {
+		for _, mutate := range []bool{false, true} {
+			s := &memoryStore{state: &State{AccessToken: "old", RefreshToken: "refresh"}}
+			f := &fakeAPI{loginResults: []*line.LoginResult{{AuthToken: "new", NoE2EE: true}}}
+			m := testManager(s, f)
+			call := m.Do
+			if mutate {
+				call = m.Mutate
+			}
+			calls := 0
+			err := call(func(API) error { calls++; return errors.New(response) })
+			if !errors.Is(err, ErrSessionInvalidated) || !strings.Contains(err.Error(), "168 hours") || !strings.Contains(err.Error(), "line login") || strings.Contains(err.Error(), "synthetic-secret") {
+				t.Fatal("missing safe expiration guidance", err)
+			}
+			if calls != 1 || f.refreshCalls != 0 || !s.state.Invalidated {
+				t.Fatal("terminal rejection retried or not persisted")
+			}
+			if err := m.Do(func(API) error { t.Fatal("invalidated session reused"); return nil }); !errors.Is(err, ErrSessionInvalidated) {
+				t.Fatal(err)
+			}
+			if _, err := m.Login("synthetic@example.test", "synthetic", nil); err != nil {
+				t.Fatal(err)
+			}
+			if s.state.Invalidated || s.state.AccessToken != "new" {
+				t.Fatal("login did not replace invalidated session")
+			}
+			if err := m.Do(func(API) error { calls++; return nil }); err != nil || calls != 2 {
+				t.Fatal("authenticated command did not recover", err)
+			}
+		}
+	}
+}
+
+func TestRefreshRejectionHasExpiryGuidanceWithoutLeakingBody(t *testing.T) {
+	for _, scheduled := range []bool{false, true} {
+		s := &memoryStore{state: &State{AccessToken: "old", RefreshToken: "refresh"}}
+		if scheduled {
+			s.state.RefreshAt = time.Unix(1, 0)
+		}
+		f := &fakeAPI{refreshErr: errors.New("HTTP 401: synthetic-secret")}
+		calls := 0
+		err := testManager(s, f).Do(func(API) error { calls++; return errors.New(`{"code":119}`) })
+		wantCalls := 1
+		if scheduled {
+			wantCalls = 0
+		}
+		if err == nil || !strings.Contains(err.Error(), "168 hours") || !strings.Contains(err.Error(), "line login") || strings.Contains(err.Error(), "synthetic-secret") || calls != wantCalls || f.refreshCalls != 1 {
+			t.Fatal("unsafe or unbounded refresh rejection", err)
+		}
+		if s.state.AccessToken != "old" || s.saves != 0 {
+			t.Fatal("failed refresh changed stored credentials")
+		}
 	}
 }

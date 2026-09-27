@@ -62,7 +62,7 @@ func (w *Watcher) state(generation string) (*session.State, error) {
 		return nil, err
 	}
 	if s.Invalidated {
-		return nil, errors.New("LINE session was logged out; run line login")
+		return nil, session.ErrSessionInvalidated
 	}
 	if generation != "" && s.Generation != generation {
 		return nil, errors.New("LINE login changed; restart line watch")

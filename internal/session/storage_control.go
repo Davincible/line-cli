@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"errors"
+	"fmt"
 	"runtime"
 )
 
@@ -18,7 +19,8 @@ var (
 	ErrReadOnlyStatus      = errors.New("this native backend cannot prove write readiness without a possible unlock prompt; use interactive line login")
 	ErrStorageUnavailable  = errors.New("native storage is unavailable or locked")
 	ErrHeadlessUnavailable = errors.New("user-scoped systemd credential storage is unavailable")
-	ErrCredentialHelper    = errors.New("systemd credential operation failed")
+	ErrHeadlessHelperTrust = fmt.Errorf("%w: cannot verify root ownership and safe permissions of /usr/bin/systemd-creds and its parent directories; user-service sandboxing can hide root ownership (PrivateUsers, PrivateTmp, ProtectSystem, ProtectHome); see CLI.md Run unattended", ErrHeadlessUnavailable)
+	ErrCredentialHelper    = errors.New("systemd credential operation failed; check credential broker access, service sandboxing, and the enrolled host/user identity; see CLI.md Run unattended")
 	ErrCredentialTimeout   = errors.New("systemd credential operation timed out")
 	ErrCredentialCancelled = errors.New("systemd credential operation was cancelled")
 	ErrCredentialPolicy    = errors.New("systemd credential protection does not match the required policy")
@@ -117,6 +119,8 @@ func StorageReason(err error) string {
 		return "invalid_format"
 	case errors.Is(err, errMissingWrappingKey):
 		return "missing_key"
+	case errors.Is(err, ErrHeadlessHelperTrust):
+		return "headless_helper_untrusted"
 	case errors.Is(err, ErrHeadlessUnavailable):
 		return "headless_unavailable"
 	case errors.Is(err, ErrCredentialHelper), errors.Is(err, ErrStorageUnavailable):
@@ -136,7 +140,7 @@ func StorageExitCode(err error) int {
 		return 75
 	case "durability_uncertain", "probe_cleanup_failed":
 		return 74
-	case "storage_unavailable", "helper_timeout", "headless_unavailable":
+	case "storage_unavailable", "helper_timeout", "headless_unavailable", "headless_helper_untrusted":
 		return 69
 	case "authentication_failed", "invalid_format", "missing_key", "protection_mismatch", "helper_output_limit":
 		return 65

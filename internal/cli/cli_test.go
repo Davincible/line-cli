@@ -146,3 +146,24 @@ func TestEmptyListsAreJSONArrays(t *testing.T) {
 }
 
 func (f *readAPI) GetProfileContext(context.Context) (*line.Profile, error) { return f.GetProfile() }
+
+type rejectedSessionAPI struct{ readAPI }
+
+func (*rejectedSessionAPI) GetProfile() (*line.Profile, error) {
+	return nil, fmt.Errorf(`API error 401: {"code":10004,"message":"REQUEST_NEED_LOGIN","private":"synthetic-secret"}`)
+}
+
+func TestWhoamiRejectedSessionHasSafeReloginGuidance(t *testing.T) {
+	for _, jsonOutput := range []bool{false, true} {
+		a, out, _ := testApp(nil)
+		a.Manager.NewClient = func(string) session.API { return &rejectedSessionAPI{} }
+		args := []string{"whoami"}
+		if jsonOutput {
+			args = append(args, "--json")
+		}
+		err := a.Run(args)
+		if err == nil || !strings.Contains(err.Error(), "session expired or was invalidated") || !strings.Contains(err.Error(), "168 hours") || !strings.Contains(err.Error(), "line login") || strings.Contains(err.Error(), "synthetic-secret") || out.Len() != 0 {
+			t.Fatal("missing safe re-login guidance or contaminated stdout", err)
+		}
+	}
+}
