@@ -71,7 +71,7 @@ The Secret Service keyring must be running and unlocked in the same D-Bus sessio
 > still prevent saving the session.
 
 On supported headless Linux systems, `line login --headless` uses systemd
-user-scoped host-key storage after you accept its weaker protection against a
+user-scoped host-key storage after you accept that it does not protect against a
 complete disk copy. It does not claim TPM protection. Use a stable, dedicated
 Unix account for automation. Existing native sessions can be moved without
 contacting LINE:
@@ -149,11 +149,13 @@ line send "Alice" --text "Hello!"
 ```
 
 Both methods check storage and ask before replacing a usable saved session.
-`--force` skips that replacement question. Login progress goes to stderr; only
-completion output goes to stdout. For a narrow or accessible terminal,
+`--force` skips that replacement question. Login progress, QR codes, and PINs
+go to stderr; only completion output goes to stdout. For a narrow or accessible terminal,
 `line login --qr-url` explicitly shows a sensitive one-time value for a trusted
-local QR tool; do not share it or use an online generator. Login remains
-interactive, including over SSH and with `--headless`.
+local QR tool; do not share or save it, or use an online generator. Login remains
+interactive, including over SSH and with `--headless`. On headless Linux, use
+`line login --headless --email you@example.com` for email login or
+`line login --headless` for experimental QR login.
 
 Names must be unique exact matches when passed as arguments. Run a command
 without a target to choose a chat interactively:
@@ -195,8 +197,8 @@ duplicate.
 ## Security and privacy
 
 LINE CLI uses Letter Sealing when the account and conversation support it.
-Missing keys and network failures do not silently downgrade an encrypted send to
-plaintext. Send results report whether encryption was used.
+Missing or malformed keys and network failures do not silently downgrade an
+encrypted send to plaintext. Send results report whether encryption was used.
 
 Your password is never saved. Sessions are protected by the operating system:
 
@@ -222,8 +224,6 @@ compatibility.
 ## Documentation
 
 - [Complete CLI reference and troubleshooting](CLI.md)
-- [Letter Sealing implementation notes](readme/LETTER_SEALING.md)
-- [Contributor guidance and package layout](AGENTS.md)
 
 ## Development
 

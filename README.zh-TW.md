@@ -63,19 +63,22 @@ Secret Service 金鑰圈必須在同一個 D-Bus 工作階段中執行並保持�
 > [!IMPORTANT]
 > 透過 SSH 或無頭環境使用 Linux 時，只安裝套件還不夠。如果 CLI 所在的
 > D-Bus 工作階段沒有已解鎖的 Secret Service，登入流程會在產生 QR 碼或
-> 要求 LINE 密碼前的儲存空間檢查階段停止。
+> 要求 LINE 密碼前的儲存空間檢查階段停止。本機輸入完成後也會再次檢查；
+> 若金鑰圈或檔案系統之後發生問題，仍可能無法儲存工作階段。
 
 在支援的無頭 Linux 系統上，可使用 `line login --headless`。明確同意限制後，
 CLI 會改用 systemd 使用者範圍的主機金鑰儲存機制。此方式無法防止整顆磁碟遭
-複製，也不代表具備 TPM 保護。既有的原生工作階段可在不連線至 LINE 的情況下移轉：
+複製，也不具備 TPM 保護。自動化作業請使用穩定的專用 Unix 帳號。
+既有的原生工作階段可在不連線至 LINE 的情況下移轉：
 
 ```sh
 line auth migrate --storage=headless
 line auth status --check
 ```
 
-升級前請先停止正在執行的 CLI 指令與 watcher。完整需求、支援的 systemd 版本與
-復原方式請參閱 [CLI 指南](CLI.md#headless-linux)。
+升級前請先停止正在執行的 CLI 指令與 watcher；不支援新舊版本同時執行。
+完整需求、服務設定、支援的 systemd 版本與復原方式請參閱
+[CLI 指南](CLI.md#headless-linux)。
 
 macOS 也可以使用 Homebrew：
 
@@ -144,7 +147,8 @@ line send "Alice" --text "Hello!"
 成功訊息輸出至 stdout。終端機過窄或需要無障礙替代方式時，可用
 `line login --qr-url` 顯示一次性敏感資料，再交由可信任的本機工具產生 QR 碼；
 不要分享、儲存或上傳至線上產生器。SSH 與 `--headless` 登入仍需互動式終端機。
-目前無頭 Linux 可使用 `line login --headless --email you@example.com` 登入。
+在無頭 Linux 上，可使用 `line login --headless --email you@example.com`
+進行電子郵件登入，或使用 `line login --headless` 進行實驗性的 QR 登入。
 
 以參數指定名稱時，名稱必須完全相符，且不得與其他名稱重複。若要透過
 互動介面選擇聊天室，執行指令時不要提供目標：
@@ -203,6 +207,7 @@ LINE CLI 採用 LINE Chrome 類型的通訊協定。伺服器端的變更可能�
 
 - 每位作業系統使用者只能儲存一個帳號
 - QR 登入為實驗功能，不支援已關閉 Letter Sealing 的帳號。
+- LINE 會管理 Chrome 類型工作階段的有效期限，工作階段可能在約 168 小時（7 天）後到期。CLI 不會依本機經過的時間讓工作階段失效；它會在可行時更新權杖，若驗證遭拒則提示使用 `line login`。詳見[工作階段到期說明](CLI.md#session-expiration)與[無頭服務部署](CLI.md#run-unattended)。
 - 只能讀取近期記錄，每次最多 100 則訊息
 - 僅支援一般檔案傳輸，不支援貼圖或特殊媒體訊息
 - 讀取訊息不會將訊息標示為已讀
@@ -211,8 +216,6 @@ LINE CLI 採用 LINE Chrome 類型的通訊協定。伺服器端的變更可能�
 ## 文件
 
 - [完整 CLI 指令參考與疑難排解](CLI.md)
-- [Letter Sealing 實作筆記](readme/LETTER_SEALING.md)
-- [貢獻指南與套件結構](AGENTS.md)
 
 ## 開發
 
