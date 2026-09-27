@@ -137,14 +137,11 @@ instructions and contributor checks.
 on your phone. `line login --email ADDRESS` keeps the email/password flow.
 
 > [!IMPORTANT]
-> QR login has not yet completed live validation. PIN fallback now recognizes the
-> observed first-login certificate response; PIN approval, key export, and saving
-> still need live verification. Use the email fallback below for the existing
-> flow, with an email address and password configured on your LINE account.
-> See [login options and limitations](CLI.md#login).
+> QR login is experimental. Email/password login remains available with
+> `line login --email ADDRESS`. See [login options and limitations](CLI.md#login).
 
 ```sh
-line login --email you@example.com
+line login
 line whoami
 line chats
 line messages "Family group" --limit 10
@@ -215,7 +212,7 @@ compatibility.
 ## Current limitations
 
 - One saved account per OS user
-- QR login is experimental: the phone recognized a QR in a user-reported test, but PIN completion, key export, saving, and saved-certificate reuse remain unverified. Use `line login --email ADDRESS` for the existing login flow. QR login with Letter Sealing disabled is not supported.
+- QR login is experimental. QR login with Letter Sealing disabled is not supported.
 - LINE controls Chrome-style session expiration, which can occur after about 168 hours (7 days). The CLI does not expire sessions based on local age; it refreshes tokens when possible and gives actionable `line login` guidance when authentication is rejected. See [session expiration](CLI.md#session-expiration) and [headless service deployment](CLI.md#run-unattended).
 - Recent history only, up to 100 messages per read
 - Generic file transfer only; no stickers or specialized media messages

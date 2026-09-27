@@ -128,13 +128,11 @@ Windows 請使用 [PowerShell 建置指令](CLI.md#build-from-source)。
 QR 碼。`line login --email ADDRESS` 則保留電子郵件與密碼登入方式。
 
 > [!IMPORTANT]
-> QR 登入尚未完成實際環境驗證。目前已能針對首次登入時觀察到的憑證回應
-> 啟動 PIN 驗證，但 PIN 核准、金鑰匯出與儲存仍待驗證。請先使用下方的電子郵件
-> 登入方式，並在 LINE 帳號設定電子郵件地址與密碼；流程可能需要手機核准。
+> QR 登入為實驗功能。需要時可使用 `line login --email ADDRESS` 進行電子郵件與密碼登入。
 > 詳見[登入選項與限制](CLI.md#login)。
 
 ```sh
-line login --email you@example.com
+line login
 line whoami
 line chats
 line messages "Family group" --limit 10
@@ -204,7 +202,7 @@ LINE CLI 採用 LINE Chrome 類型的通訊協定。伺服器端的變更可能�
 ## 目前限制
 
 - 每位作業系統使用者只能儲存一個帳號
-- QR 登入仍屬實驗功能：使用者已回報掃描後出現手機核准畫面，但 PIN 完成、金鑰匯出、儲存與憑證重用仍待驗證。既有登入方式請使用 `line login --email ADDRESS`；QR 登入不支援已關閉 Letter Sealing 的帳號。
+- QR 登入為實驗功能，不支援已關閉 Letter Sealing 的帳號。
 - 只能讀取近期記錄，每次最多 100 則訊息
 - 僅支援一般檔案傳輸，不支援貼圖或特殊媒體訊息
 - 讀取訊息不會將訊息標示為已讀

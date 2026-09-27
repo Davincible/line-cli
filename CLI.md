@@ -59,23 +59,22 @@ line help
 
 ## Quick start
 
-Bare `line login` selects QR login. QR login is experimental: the observed
-first-login certificate response now enables PIN fallback, but completed login
-still needs live validation. Use the existing email flow below in the meantime.
-Your account must have an email
-address and password configured for this fallback, and may require phone approval.
+Bare `line login` selects QR login. Scan the terminal QR with LINE on your phone,
+approve the login, and enter the displayed PIN if prompted. QR login is
+experimental. Email/password login remains available with
+`line login --email ADDRESS`.
 
 ```sh
-line login --email you@example.com
+line login
 line whoami
 line chats
 line messages "Family group"
 line send "Alice" --text "Hello!"
 ```
 
-Your password is used only during login and is never saved. If the saved session
-expires, sign in again using the same explicit email fallback or the QR flow once
-its live behavior is verified.
+Email login requires an email address and password configured on your LINE
+account. Your password is used only during login and is never saved. If your
+session expires, sign in again with QR or the explicit email fallback.
 
 ## Login
 
@@ -110,13 +109,11 @@ code in LINE exactly as shown, including any leading zeros. Wait for
 `Session saved securely` before relying on the new session: phone approval
 alone does not mean profile validation, key export, or local saving succeeded.
 
-**Completed QR login is not yet live-validated.** A user-reported first-login
-certificate response now enables PIN verification. Other certificate errors
-still stop login, and successful PIN approval, key export, and saving remain
-unverified. A saved QR certificate is reused only when known to come from a QR
-login; legacy and email certificates are not reused. Successful live reuse and
-PIN fallback for rejected saved certificates are also unverified. Use
-`--email ADDRESS` for the existing login flow.
+**QR login is experimental.** Use `--email ADDRESS` as the email/password
+fallback if needed. A saved QR certificate is reused only when known to
+come from QR login; legacy and email certificates are not reused. PIN fallback
+for rejected saved certificates is not yet supported, and unknown certificate
+errors still stop login.
 QR accounts with Letter Sealing disabled are unsupported; missing encryption
 data never silently disables encryption.
 
@@ -172,7 +169,7 @@ display. For example:
 ```sh
 ssh -t user@host
 line login --qr
-# Existing email flow while first-time QR login remains unverified:
+# Email/password fallback:
 line login --email you@example.com
 ```
 
@@ -703,7 +700,7 @@ DPAPI roundtrip and preflight tests against temporary files.
 ## Current limitations
 
 - One saved LINE account per OS user.
-- QR login is experimental: a user-reported phone scan reached approval, but PIN completion, key export, saving, saved-certificate reuse, and SSH scans still need live validation. Use `--email ADDRESS` for the existing login flow. QR login with Letter Sealing disabled is unsupported.
+- QR login is experimental. QR login with Letter Sealing disabled is unsupported.
 - Recent history only, with at most 100 messages per read.
 - Generic files only; no stickers or specialized media sending.
 - Reading messages does not mark them as read.
