@@ -57,6 +57,16 @@ range. Versions 257 and 259 have native disposable-VM evidence; 256 and 258 are
 source-compatible candidates, not separately runtime-certified platforms.
 Operational readiness still requires a successful actual roundtrip.
 
+Ownership/permission rejection has the separate `headless_helper_untrusted`
+reason and remains exit 69 and `errors.Is(err, ErrHeadlessUnavailable)` compatible.
+A user-service namespace can leave host root unmapped, causing this trust check
+to fail. The diagnostic points operators to sandbox settings without guessing
+that every trust failure is caused by a sandbox. Discovery, file-type, root-user,
+and version failures retain `headless_unavailable` with fixed stage-specific
+text. Helper subprocess errors include broker/identity/sandbox guidance but never
+raw stderr. See [Run unattended](../../CLI.md#run-unattended) for the Debian 13
+issue report, service example, and validation limits.
+
 Each operation uses `--user`, the fixed name `line-cli-session-key`, and
 `--newline=no`. Version 259 additionally uses `--no-ask-password` and, for reads,
 `--refuse-null`. Earlier builds rely on the inspected noninteractive broker path

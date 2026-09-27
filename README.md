@@ -71,7 +71,7 @@ The Secret Service keyring must be running and unlocked in the same D-Bus sessio
 > still prevent saving the session.
 
 On supported headless Linux systems, `line login --headless` uses systemd
-user-scoped host-key storage after you accept its weaker protection against a
+user-scoped host-key storage after you accept that it does not protect against a
 complete disk copy. It does not claim TPM protection. Use a stable, dedicated
 Unix account for automation. Existing native sessions can be moved without
 contacting LINE:
@@ -137,14 +137,11 @@ instructions and contributor checks.
 on your phone. `line login --email ADDRESS` keeps the email/password flow.
 
 > [!IMPORTANT]
-> QR login has not yet completed live validation. PIN fallback now recognizes the
-> observed first-login certificate response; PIN approval, key export, and saving
-> still need live verification. Use the email fallback below for the existing
-> flow, with an email address and password configured on your LINE account.
-> See [login options and limitations](CLI.md#login).
+> QR login is experimental. Email/password login remains available with
+> `line login --email ADDRESS`. See [login options and limitations](CLI.md#login).
 
 ```sh
-line login --email you@example.com
+line login
 line whoami
 line chats
 line messages "Family group" --limit 10
@@ -152,11 +149,13 @@ line send "Alice" --text "Hello!"
 ```
 
 Both methods check storage and ask before replacing a usable saved session.
-`--force` skips that replacement question. Login progress goes to stderr; only
-completion output goes to stdout. For a narrow or accessible terminal,
+`--force` skips that replacement question. Login progress, QR codes, and PINs
+go to stderr; only completion output goes to stdout. For a narrow or accessible terminal,
 `line login --qr-url` explicitly shows a sensitive one-time value for a trusted
-local QR tool; do not share it or use an online generator. Login remains
-interactive, including over SSH and with `--headless`.
+local QR tool; do not share or save it, or use an online generator. Login remains
+interactive, including over SSH and with `--headless`. On headless Linux, use
+`line login --headless --email you@example.com` for email login or
+`line login --headless` for experimental QR login.
 
 Names must be unique exact matches when passed as arguments. Run a command
 without a target to choose a chat interactively:
@@ -198,8 +197,8 @@ duplicate.
 ## Security and privacy
 
 LINE CLI uses Letter Sealing when the account and conversation support it.
-Missing keys and network failures do not silently downgrade an encrypted send to
-plaintext. Send results report whether encryption was used.
+Missing or malformed keys and network failures do not silently downgrade an
+encrypted send to plaintext. Send results report whether encryption was used.
 
 Your password is never saved. Sessions are protected by the operating system:
 
@@ -215,8 +214,8 @@ compatibility.
 ## Current limitations
 
 - One saved account per OS user
-- QR login is experimental: the phone recognized a QR in a user-reported test, but PIN completion, key export, saving, and saved-certificate reuse remain unverified. Use `line login --email ADDRESS` for the existing login flow. QR login with Letter Sealing disabled is not supported.
-- LINE access tokens commonly reach a refresh boundary at around 168 hours (7 days). The CLI refreshes them automatically when possible, but a rejected or invalidated refresh token requires `line login` again.
+- QR login is experimental. QR login with Letter Sealing disabled is not supported.
+- LINE controls Chrome-style session expiration, which can occur after about 168 hours (7 days). The CLI does not expire sessions based on local age; it refreshes tokens when possible and gives actionable `line login` guidance when authentication is rejected. See [session expiration](CLI.md#session-expiration) and [headless service deployment](CLI.md#run-unattended).
 - Recent history only, up to 100 messages per read
 - Generic file transfer only; no stickers or specialized media messages
 - Reading messages does not mark them as read
@@ -225,8 +224,6 @@ compatibility.
 ## Documentation
 
 - [Complete CLI reference and troubleshooting](CLI.md)
-- [Letter Sealing implementation notes](readme/LETTER_SEALING.md)
-- [Contributor guidance and package layout](AGENTS.md)
 
 ## Development
 

@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/subtle"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -38,7 +39,7 @@ type systemdCredentials struct {
 
 func newSystemdCredentials(ctx context.Context) (sealedKeyProvider, error) {
 	if os.Geteuid() == 0 {
-		return nil, ErrHeadlessUnavailable
+		return nil, fmt.Errorf("%w: run as the unprivileged account that enrolled the session", ErrHeadlessUnavailable)
 	}
 	path, err := trustedSystemdPath()
 	if err != nil {
@@ -60,13 +61,13 @@ func newSystemdCredentials(ctx context.Context) (sealedKeyProvider, error) {
 func parseSystemdVersion(data []byte) (int, error) {
 	match := regexp.MustCompile(`^systemd ([0-9]+)\b`).FindSubmatch(data)
 	if len(match) != 2 {
-		return 0, ErrHeadlessUnavailable
+		return 0, fmt.Errorf("%w: cannot determine systemd-creds version", ErrHeadlessUnavailable)
 	}
 	version, err := strconv.Atoi(string(match[1]))
 	// 256 is the source-inspected feature floor; 257 and 259 have native VM
 	// evidence. Future helper generations require review before enabling them.
 	if err != nil || version < 256 || version > 259 {
-		return 0, ErrHeadlessUnavailable
+		return 0, fmt.Errorf("%w: systemd-creds version must be in the supported 256–259 range", ErrHeadlessUnavailable)
 	}
 	return version, nil
 }
@@ -74,29 +75,36 @@ func parseSystemdVersion(data []byte) (int, error) {
 func trustedSystemdPath() (string, error) {
 	path, err := filepath.EvalSymlinks("/usr/bin/systemd-creds")
 	if err != nil {
-		return "", ErrHeadlessUnavailable
+		return "", fmt.Errorf("%w: cannot resolve /usr/bin/systemd-creds; check installation and service filesystem access", ErrHeadlessUnavailable)
 	}
 	for current := path; ; current = filepath.Dir(current) {
 		info, err := os.Lstat(current)
 		if err != nil {
-			return "", ErrHeadlessUnavailable
+			return "", fmt.Errorf("%w: cannot inspect systemd-creds or its parent directories; check service filesystem access", ErrHeadlessUnavailable)
 		}
-		stat, ok := info.Sys().(*syscall.Stat_t)
-		if !ok || stat.Uid != 0 || info.Mode().Perm()&0022 != 0 {
-			return "", ErrHeadlessUnavailable
-		}
-		if current == path {
-			if !info.Mode().IsRegular() || info.Mode().Perm()&0111 == 0 {
-				return "", ErrHeadlessUnavailable
-			}
-		} else if !info.IsDir() {
-			return "", ErrHeadlessUnavailable
+		if err := validateSystemdFile(info, current == path); err != nil {
+			return "", err
 		}
 		if current == filepath.Dir(current) {
 			break
 		}
 	}
 	return path, nil
+}
+
+func validateSystemdFile(info os.FileInfo, executable bool) error {
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok || stat.Uid != 0 || info.Mode().Perm()&0022 != 0 {
+		return ErrHeadlessHelperTrust
+	}
+	if executable {
+		if !info.Mode().IsRegular() || info.Mode().Perm()&0111 == 0 {
+			return fmt.Errorf("%w: systemd-creds is not a regular executable", ErrHeadlessUnavailable)
+		}
+	} else if !info.IsDir() {
+		return fmt.Errorf("%w: systemd-creds parent is not a directory", ErrHeadlessUnavailable)
+	}
+	return nil
 }
 
 type credentialOutput struct {

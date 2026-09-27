@@ -12,12 +12,14 @@
 - [x] Terminal QR UI and method selection.
 - [x] Signal cancellation, input interruption, and terminal restoration.
 - [x] CLI guide and English, Traditional Chinese, Japanese, and Thai README updates.
+- [x] User-reported first-time QR/PIN login through secure save.
 - [ ] Authorized live validation of outstanding protocol unknowns.
 
-Status: phases 1–5 and phase 6 documentation implemented; no completed live QR
-login validation as of 2026-09-27. The observed empty-certificate error now permits
-PIN fallback; unknown certificate errors still fail closed. User documentation
-labels QR login experimental and retains the explicit email fallback.
+Status: phases 1–5 and phase 6 documentation implemented. A user-reported
+first-time QR/PIN login completed through secure save on 2026-09-27 using the
+build from checkpoint `a58aaf7`. Broader live validation remains open, including
+saved-certificate reuse and expiry/regeneration. Unknown certificate errors
+still fail closed, and the explicit email fallback remains available.
 
 User-reported smoke test (2026-09-27): scanning the terminal QR opened LINE's
 Chrome login approval screen on the phone. The user tapped Log in, then the CLI
@@ -40,7 +42,16 @@ only at `verifyCertificate` and only when the submitted certificate is empty.
 It enables Chrome's evidenced `createPinCode` → `checkPinCodeVerified` path.
 The original numeric error remains available through unwrapping. No meaning is
 assigned to service code 2 on other methods, with saved certificates, or under
-different HTTP/gateway statuses. PIN success and completed login remain unverified.
+different HTTP/gateway statuses.
+
+The user's subsequent run reported scan detection, PIN display, phone verification
+accepted, login approved, and a securely saved session. The success path requires
+profile validation, Letter Sealing key export, and a successful local save before
+printing that completion. This is a user-reported end-to-end result, not an
+independent credential-store inspection or wire capture. No account identifiers,
+PIN, QR value, keys, or raw output are retained here. Post-restart reads, saved
+certificate reuse, expired-code regeneration, and cross-platform/SSH behavior
+remain unverified by this report.
 
 Evidence: LINE Chrome Extension manifest 3.7.2, local static bundle. `main.js`
 SHA-256: `2912a06d868c2829636be1613c622f28807efe74a7868cfb143678a38b80cc2a`.
@@ -137,7 +148,8 @@ Only a non-invalidated, QR-origin certificate can be reused. State now records
 `certificate_origin`; an absent value means unknown. PIN fallback requires
 `ErrQRCertificateRejected`, produced only for the observed empty-certificate
 HTTP 400 / gateway 10051 / service 2 response. Synthetic tests check that narrow
-classification and orchestration; they do not prove successful live PIN approval.
+classification and orchestration; live PIN completion is supported by the user
+report above, not by those synthetic fixtures alone.
 
 Both login methods use contextual profile validation and encrypted identity
 retrieval, then export keys and save the complete state. QR requires a nonempty

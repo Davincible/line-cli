@@ -59,23 +59,22 @@ line help
 
 ## Quick start
 
-Bare `line login` selects QR login. QR login is experimental: the observed
-first-login certificate response now enables PIN fallback, but completed login
-still needs live validation. Use the existing email flow below in the meantime.
-Your account must have an email
-address and password configured for this fallback, and may require phone approval.
+Bare `line login` selects QR login. Scan the terminal QR with LINE on your phone,
+approve the login, and enter the displayed PIN if prompted. QR login is
+experimental. Email/password login remains available with
+`line login --email ADDRESS`.
 
 ```sh
-line login --email you@example.com
+line login
 line whoami
 line chats
 line messages "Family group"
 line send "Alice" --text "Hello!"
 ```
 
-Your password is used only during login and is never saved. If the saved session
-expires, sign in again using the same explicit email fallback or the QR flow once
-its live behavior is verified.
+Email login requires an email address and password configured on your LINE
+account. Your password is used only during login and is never saved. If your
+session expires, sign in again with QR or the explicit email fallback.
 
 ## Login
 
@@ -110,13 +109,11 @@ code in LINE exactly as shown, including any leading zeros. Wait for
 `Session saved securely` before relying on the new session: phone approval
 alone does not mean profile validation, key export, or local saving succeeded.
 
-**Completed QR login is not yet live-validated.** A user-reported first-login
-certificate response now enables PIN verification. Other certificate errors
-still stop login, and successful PIN approval, key export, and saving remain
-unverified. A saved QR certificate is reused only when known to come from a QR
-login; legacy and email certificates are not reused. Successful live reuse and
-PIN fallback for rejected saved certificates are also unverified. Use
-`--email ADDRESS` for the existing login flow.
+**QR login is experimental.** Use `--email ADDRESS` as the email/password
+fallback if needed. A saved QR certificate is reused only when known to
+come from QR login; legacy and email certificates are not reused. PIN fallback
+for rejected saved certificates is not yet supported, and unknown certificate
+errors still stop login.
 QR accounts with Letter Sealing disabled are unsupported; missing encryption
 data never silently disables encryption.
 
@@ -172,7 +169,7 @@ display. For example:
 ```sh
 ssh -t user@host
 line login --qr
-# Existing email flow while first-time QR login remains unverified:
+# Email/password fallback:
 line login --email you@example.com
 ```
 
@@ -446,36 +443,120 @@ envelope, and recovery design.
 For unattended use, enroll interactively as a dedicated unprivileged account,
 then verify `auth status --check` under that same UID and environment after a
 reboot. Keep `HOME` and `XDG_CONFIG_HOME` fixed. The operator owns service and
-cron configuration; the CLI does not install either. For example, after installing
-the binary at the path below and creating/enrolling the `linebot` account:
+cron configuration; the CLI does not install either.
+
+#### Headless user service
+
+Save this as `~/.config/systemd/user/line-watch.service` for the enrolled account.
+Install the binary at the path shown, or adjust the executable path. `%h` is
+the account's home directory; use the same config directory used during login.
+Do not add `User=` to a user-manager service.
 
 ```ini
 [Unit]
 Description=LINE event watcher
-Wants=network-online.target
-After=network-online.target
 StartLimitIntervalSec=300
 StartLimitBurst=5
 
 [Service]
-User=linebot
-Environment=HOME=/home/linebot
-Environment=XDG_CONFIG_HOME=/home/linebot/.config
+Environment=HOME=%h
+Environment=XDG_CONFIG_HOME=%h/.config
 UMask=0077
+NoNewPrivileges=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+LockPersonality=true
+MemoryDenyWriteExecute=true
 ExecStart=/usr/local/bin/line watch
 Restart=on-failure
 RestartSec=15s
-RestartPreventExitStatus=65 74 78
+RestartPreventExitStatus=65 69 74 78
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target
 ```
 
+The hardening settings above are the working combination reported on Debian 13,
+systemd 257.13, ARM64 in [issue #3](https://github.com/kongesque/line-cli/issues/3).
+The complete example adds restart limits; validate it on the deployment host
+before enabling it. It has not been certified across
+all kernels or systemd releases. `AF_UNIX` is needed for the credential broker;
+`AF_INET` and `AF_INET6` permit LINE connections and DNS.
+
+After saving the unit, run as the enrolled account:
+
+```sh
+systemctl --user daemon-reload
+systemctl --user start line-watch.service
+systemctl --user status line-watch.service
+# Enable after checking that storage and the watcher both start successfully:
+systemctl --user enable line-watch.service
+```
+
+For startup without an interactive login, an administrator may need to enable
+lingering for this account. For a system-manager service instead, add
+`User=linebot`, use explicit `/home/linebot` paths for both environment variables,
+and change `WantedBy=` to `multi-user.target`.
+
+#### Sandbox compatibility and diagnosis
+
+The following settings failed in the issue #3 user-service environment:
+
+| Setting | Reported result |
+| --- | --- |
+| `PrivateTmp=true` | Headless helper unavailable, exit 69 |
+| `ProtectSystem=strict` | Headless helper unavailable, exit 69 |
+| `ProtectHome=read-only` | Nonzero exit, including filesystem write failure |
+
+Leave these settings and `PrivateUsers=` out of the baseline unit. Adding
+`ReadWritePaths=%h/.config/line-cli` alone did not resolve the reported failures.
+This is a compatibility limit for the reported user-service configuration, not a
+claim that these directives fail for every system-manager service.
+
+Systemd filesystem sandboxing in user services can involve a user namespace.
+With a per-user manager, `PrivateUsers=true` omits the host root UID mapping
+([systemd 257 documentation](https://github.com/systemd/systemd/blob/v257/man/systemd.exec.xml)).
+This can make the root-owned helper appear owned by an unmapped UID. The CLI
+must reject a helper whose root ownership and safe permissions it cannot verify.
+It does not relax trust checks or change storage providers to work around this.
+Read-only mounts can also block locks, path registration, refreshed tokens,
+request sequences, and watcher checkpoints. Both `$XDG_CONFIG_HOME/line-cli` and
+`$HOME/.config/line-cli` need write access, even when they are different paths.
+
+`auth status --check --json` reports `headless_helper_untrusted` (exit 69) when
+the helper or its parent directories fail ownership/permission checks. The human
+error names the sandbox settings to inspect. This reason can also indicate a
+real installation permission problem; it does not prove sandboxing caused it.
+`headless_unavailable` remains the reason for discovery, unsupported-version,
+and root-execution failures, with a stage-specific human diagnostic.
+`storage_unavailable` can indicate a credential broker or unsealing failure;
+helper stderr is never exposed.
+
+Compare `line auth status --check --json` interactively and inside a transient
+unit using the same account, environment, and hardening settings:
+
+```sh
+systemd-run --user --wait --collect \
+  --property=Environment=HOME="$HOME" \
+  --property=Environment=XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}" \
+  --property=UMask=0077 \
+  --property=NoNewPrivileges=true \
+  --property='RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6' \
+  --property=LockPersonality=true \
+  --property=MemoryDenyWriteExecute=true \
+  /usr/local/bin/line auth status --check --json
+```
+
+This check is local and does not contact LINE. Test added sandbox directives one
+at a time. Restore the working service environment instead of deleting the
+session or re-enrolling to fix a sandbox-only failure.
+
 Treat watcher output as private message data and restrict its journal or output
-files. If the service stops, run `line auth status --check` as the service user
-before restarting it. This restart policy applies only to the watcher process; it
-does not authorize retrying sends or other remote mutations. Cron jobs should use
-the same account and paths, with `umask 077`.
+files. If the service stops, run the local check as the service user before
+restarting it. Exit 69 from the watcher suppresses automatic restarts. After
+repairing storage, use `systemctl --user reset-failed line-watch.service` and start it
+again. This restart policy applies only to the watcher; it does not authorize
+retrying sends or other remote mutations. Cron jobs should use the same account
+and paths, with `umask 077`.
 
 ### Linux files and upgrades
 
@@ -528,6 +609,26 @@ Signals take precedence over storage error codes: SIGINT exits 130 and SIGTERM
 exits 143. Other CLI and network errors use status 1. `auth status --json` still
 writes its status object when storage is unavailable, then returns the matching
 nonzero status.
+
+### Session expiration
+
+LINE controls the lifetime of Chrome-style sessions, which can expire after
+about 168 hours (7 days). The CLI does not impose a seven-day local expiration:
+it continues using accepted credentials and uses LINE's token refresh schedule
+when provided. A refresh boundary is not itself a terminal session expiration.
+
+When LINE returns a terminal authentication signal such as `REQUEST_NEED_LOGIN`
+or `V3_TOKEN_CLIENT_LOGGED_OUT`, the CLI stops using the session and asks you to
+run `line login`. These signals do not uniquely distinguish expiration from
+replacement by another Chrome client, so the diagnostic says the session
+"expired or was invalidated". Failed authentication during token refresh also
+provides expiration context and the re-login command, without exposing the
+server response. Network failures remain connection errors.
+
+Read-only requests can recover authentication with one refresh and retry.
+Remote mutations are never replayed automatically. Successful login replaces the
+invalidated session and restores authenticated commands. `auth status --check`
+only checks local storage access; it does not verify LINE session validity.
 
 ### Log out
 
@@ -599,7 +700,7 @@ DPAPI roundtrip and preflight tests against temporary files.
 ## Current limitations
 
 - One saved LINE account per OS user.
-- QR login is experimental: a user-reported phone scan reached approval, but PIN completion, key export, saving, saved-certificate reuse, and SSH scans still need live validation. Use `--email ADDRESS` for the existing login flow. QR login with Letter Sealing disabled is unsupported.
+- QR login is experimental. QR login with Letter Sealing disabled is unsupported.
 - Recent history only, with at most 100 messages per read.
 - Generic files only; no stickers or specialized media sending.
 - Reading messages does not mark them as read.

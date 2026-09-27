@@ -262,7 +262,7 @@ func (m *Manager) do(call func(API) error, retry bool) error {
 		return err
 	}
 	if s.Invalidated {
-		return errors.New("LINE session was logged out; run line login")
+		return ErrSessionInvalidated
 	}
 	api := m.NewClient(s.AccessToken)
 	refreshed := false
@@ -321,7 +321,7 @@ func (m *Manager) invalidate(s *State) error {
 	if err := m.Store.Save(s); err != nil {
 		return err
 	}
-	return errors.New("LINE logged out this session, possibly because another Chrome client signed in; run line login")
+	return ErrSessionInvalidated
 }
 
 // MarkLoggedOut invalidates the current session without attempting token refresh.
@@ -350,6 +350,9 @@ type RemoteError struct {
 
 func (e *RemoteError) Error() string {
 	if line.IsAuthError(e.cause) {
+		if e.Action == "request" || e.Action == "token refresh" {
+			return fmt.Sprintf("LINE %s requires authentication; the session may have expired or been invalidated. Chrome-style sessions can expire after about 168 hours (7 days). Run line login to authenticate again", e.Action)
+		}
 		return fmt.Sprintf("LINE %s requires authentication; run line login", e.Action)
 	}
 	return fmt.Sprintf("LINE %s failed; check your connection and LINE account settings", e.Action)
@@ -373,7 +376,7 @@ func (m *Manager) ReserveSequence() (int64, error) {
 		return 0, err
 	}
 	if s.Invalidated {
-		return 0, errors.New("LINE session was logged out; run line login")
+		return 0, ErrSessionInvalidated
 	}
 	next := max(m.Now().UnixMilli()%1_000_000_000, s.LastReqSeq+1, 1)
 	if next > 2_147_483_647 {

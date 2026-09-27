@@ -7,6 +7,10 @@ import (
 
 var ErrNotFound = errors.New("no saved LINE session; run line login")
 
+// Terminal authentication signals do not distinguish expiration from session
+// replacement. Do not infer expiration from local age.
+var ErrSessionInvalidated = errors.New("LINE session expired or was invalidated. Chrome-style sessions can expire after about 168 hours (7 days), or be replaced by another Chrome client. Run line login to authenticate again")
+
 // State is secret material. Never print it or include it in diagnostic errors.
 // Passwords are deliberately absent: expired refresh credentials require login.
 type State struct {
