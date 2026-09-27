@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -22,10 +23,12 @@ func (a *App) downloadCommand(args []string) error {
 	fs.SetOutput(a.Err)
 	fs.Usage = func() {
 		fmt.Fprintln(a.Err, "Usage: line download CHAT --message ID --output PATH [--json]")
+		fmt.Fprintln(a.Err, "       line download CHAT --message ID --output - | COMMAND")
+		fmt.Fprintln(a.Err, "Download an image, video, audio, or file (up to 20 MiB).")
 		fs.PrintDefaults()
 	}
-	id := fs.String("message", "", "file message ID (within the latest 100 messages)")
-	output := fs.String("output", "", "destination file; existing files are never overwritten")
+	id := fs.String("message", "", "attachment message ID (within the latest 100 messages)")
+	output := fs.String("output", "", "destination path (never overwritten), or - for binary stdout")
 	jsonOutput := fs.Bool("json", false, "write JSON summary")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -38,7 +41,10 @@ func (a *App) downloadCommand(args []string) error {
 	} else if fs.NArg() != 0 {
 		return errors.New("unexpected download arguments")
 	}
-	guided := a.Interactive && !*jsonOutput
+	if err := a.validateDownloadOutput(*output, *jsonOutput); err != nil {
+		return err
+	}
+	guided := a.Interactive && !*jsonOutput && *output != "-"
 	if chat != "" || !guided {
 		if err := validateSelector(chat); err != nil {
 			return err
@@ -72,19 +78,29 @@ func (a *App) downloadCommand(args []string) error {
 			if *output == "" {
 				return errors.New("output path cannot be empty")
 			}
+			if err := a.validateDownloadOutput(*output, *jsonOutput); err != nil {
+				return err
+			}
+			if *output == "-" {
+				return errors.New("binary stdout requires explicit options: line download CHAT --message ID --output -")
+			}
 		}
 	}
-	if _, err := os.Lstat(*output); err == nil {
-		return errors.New("output already exists; choose a new path")
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return err
+	var f *os.File
+	if *output != "-" {
+		if _, err := os.Lstat(*output); err == nil {
+			return errors.New("output already exists; choose a new path")
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		var err error
+		f, err = os.CreateTemp(filepath.Dir(*output), ".line-download-*")
+		if err != nil {
+			return err
+		}
+		defer os.Remove(f.Name())
+		defer f.Close()
 	}
-	f, err := os.CreateTemp(filepath.Dir(*output), ".line-download-*")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(f.Name())
-	defer f.Close()
 	unlock, err := a.lock()
 	if err != nil {
 		return err
@@ -106,6 +122,16 @@ func (a *App) downloadCommand(args []string) error {
 	defer cancel()
 	data, err := c.DownloadFile(ctx, chat, *id)
 	if err != nil {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if *output == "-" {
+		n, err := a.Out.Write(data)
+		if err == nil && n != len(data) {
+			err = io.ErrShortWrite
+		}
 		return err
 	}
 	if _, err = f.Write(data); err != nil {
@@ -131,4 +157,17 @@ func (a *App) downloadCommand(args []string) error {
 	}
 	_, err = fmt.Fprintf(a.Out, "Saved %d bytes to %s\n", len(data), terminalText(*output))
 	return err
+}
+
+func (a *App) validateDownloadOutput(output string, jsonOutput bool) error {
+	if output != "-" {
+		return nil
+	}
+	if jsonOutput {
+		return errors.New("--output - cannot be combined with --json; binary bytes and a JSON summary cannot share stdout")
+	}
+	if a.StdoutIsTerminal {
+		return errors.New("refusing to write binary data to a terminal; use --output PATH or pipe stdout to another command")
+	}
+	return nil
 }

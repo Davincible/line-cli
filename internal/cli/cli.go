@@ -32,7 +32,7 @@ Everyday commands:
 More commands:
   auth        Inspect local session storage (auth status)
   watch       Stream live events (--json)
-  download    Choose a file message and save it
+  download    Save an image, video, audio, or file attachment
   react       Add or remove a reaction
   unsend      Retract one of your own messages
   version     Show the installed version
@@ -50,6 +50,7 @@ Use --show-ids for IDs, --json for scripts, or COMMAND --help for all options.
 
 type App struct {
 	Interactive      bool
+	StdoutIsTerminal bool
 	input            *bufio.Reader
 	promptAccount    *promptAccount
 	loginSnapshot    *session.LoginSnapshot
