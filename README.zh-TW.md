@@ -209,7 +209,7 @@ LINE CLI 採用 LINE Chrome 類型的通訊協定。伺服器端的變更可能�
 
 - 每位作業系統使用者只能儲存一個帳號
 - QR 登入為實驗功能，不支援已關閉 Letter Sealing 的帳號。
-- LINE 會管理 Chrome 類型工作階段的有效期限，工作階段可能在約 168 小時（7 天）後到期。CLI 不會依本機經過的時間讓工作階段失效；它會在可行時更新權杖，若驗證遭拒則提示使用 `line login`。詳見[工作階段到期說明](CLI.md#session-expiration)與[無頭服務部署](CLI.md#run-unattended)。
+- 一般約 168 小時（7 天）的存取權杖更新週期，會由 V3 自動更新機制處理，CLI 重新啟動後也適用。只有在無法透過更新權杖恢復存取，或 LINE 明確使工作階段失效時，才需要手動登入。詳見[權杖更新與工作階段失效](CLI.md#token-refresh-and-session-invalidation)與[無頭服務部署](CLI.md#run-unattended)。
 - 只能讀取近期記錄，每次最多 100 則訊息
 - 傳送僅支援一般檔案，不支援貼圖或特殊媒體訊息傳送
 - 媒體下載上限為 20 MiB，不支援外部媒體網址
