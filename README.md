@@ -32,6 +32,7 @@ encryption and native credential storage.
 - Read recent message history
 - Send text and multiline messages
 - Send generic files up to 20 MiB
+- Download images, video, audio, and files up to 20 MiB to a path or binary stdout
 - Reply to existing messages
 - Add or remove standard reactions
 - Unsend your own messages
@@ -174,6 +175,7 @@ line send "Alice" --file ./report.pdf
 line send "Alice" --text "Sounds good" --reply-to MESSAGE_ID
 line react "Alice" --message MESSAGE_ID --reaction love
 line download "Alice" --message MESSAGE_ID --output ./received.pdf
+line download "Alice" --message IMAGE_MESSAGE_ID --output ./photo.jpg
 ```
 
 Use `line COMMAND --help` for flags and examples.
@@ -217,7 +219,8 @@ compatibility.
 - QR login is experimental. QR login with Letter Sealing disabled is not supported.
 - LINE controls Chrome-style session expiration, which can occur after about 168 hours (7 days). The CLI does not expire sessions based on local age; it refreshes tokens when possible and gives actionable `line login` guidance when authentication is rejected. See [session expiration](CLI.md#session-expiration) and [headless service deployment](CLI.md#run-unattended).
 - Recent history only, up to 100 messages per read
-- Generic file transfer only; no stickers or specialized media messages
+- Sending supports generic files only; no stickers or specialized media sending
+- Media downloads are limited to 20 MiB; external media URLs are unsupported
 - Reading messages does not mark them as read
 - Some protocol paths still need broader live validation
 

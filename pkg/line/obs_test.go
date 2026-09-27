@@ -49,7 +49,7 @@ func TestDownloadOBSHonorsOptionalSizeLimit(t *testing.T) {
 		}
 		return obsResponse(http.StatusOK, "12345"), nil
 	})}
-	if _, err := client.DownloadOBSWithSIDOptions(context.Background(), "oid", "123", "emf", OBSDownloadOptions{MaxBytes: 4}); err == nil {
+	if _, err := client.DownloadOBSWithSIDOptions(context.Background(), "oid", "123", "emf", OBSDownloadOptions{MaxBytes: 4}); !errors.Is(err, ErrOBSSizeLimit) {
 		t.Fatal("oversized object accepted")
 	}
 	data, err := client.DownloadOBSWithSIDOptions(context.Background(), "oid", "123", "emf", OBSDownloadOptions{MaxBytes: 5})
@@ -556,6 +556,36 @@ func TestDownloadAlbumPreviewClassifiesHTTPStatus(t *testing.T) {
 			)
 			if !test.check(err) {
 				t.Fatalf("err = %v, wrong classification", err)
+			}
+		})
+	}
+}
+
+func TestDownloadOBSAllEncryptedMediaUseFullObject(t *testing.T) {
+	installCachedOBSToken(t)
+	for _, sid := range []string{"emi", "emv", "ema", "emf"} {
+		t.Run(sid, func(t *testing.T) {
+			var requests []observedOBSRequest
+			client := NewClient("synthetic")
+			client.OBSClient = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				requests = append(requests, observedOBSRequest{path: req.URL.Path, query: req.URL.RawQuery, headers: req.Header.Clone()})
+				if strings.HasSuffix(req.URL.Path, "object_info.obs") {
+					return obsResponse(http.StatusOK, `{"status":"exist","encodeStatus":"done"}`), nil
+				}
+				return obsResponse(http.StatusOK, "full media"), nil
+			})}
+			data, err := client.DownloadOBSWithSIDOptions(context.Background(), "object-id", "123", sid, OBSDownloadOptions{OBSPop: "a b&c", MaxBytes: 100})
+			if err != nil || string(data) != "full media" || len(requests) != 2 {
+				t.Fatal("download failed", err)
+			}
+			base := "/r/talk/" + sid + "/object-id"
+			if requests[0].path != base+"/object_info.obs" || requests[1].path != base {
+				t.Fatal("download requested a preview or wrong object", requests)
+			}
+			for _, request := range requests {
+				if request.query != "p=a+b%26c" || request.headers.Get("X-Talk-Meta") == "" || request.headers.Get("X-Line-Access") != "obs-token" || request.headers.Get("X-Line-Application") != lineApplicationHeader {
+					t.Fatal("incorrect media headers/query")
+				}
 			}
 		})
 	}

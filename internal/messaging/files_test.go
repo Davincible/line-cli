@@ -20,6 +20,8 @@ type fileAPI struct {
 	options                          line.OBSDownloadOptions
 	requestSID, requestOID, talkMeta string
 	uploadErr, plainErr              error
+	downloadErr                      error
+	downloads                        int
 }
 
 func (f *fileAPI) UploadOBSWithSID(data []byte, sid string) (string, error) {
@@ -43,9 +45,10 @@ func (f *fileAPI) SendMessage(seq int64, msg *line.Message) (*line.Message, erro
 	return f.fakeAPI.SendMessage(seq, msg)
 }
 func (f *fileAPI) DownloadOBSWithSIDOptions(_ context.Context, oid, message, sid string, opts line.OBSDownloadOptions) ([]byte, error) {
+	f.downloads++
 	f.options = opts
 	f.requestOID, f.talkMeta, f.requestSID = oid, message, sid
-	return f.data, nil
+	return f.data, f.downloadErr
 }
 
 type fileCrypto struct {

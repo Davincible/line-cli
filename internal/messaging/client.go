@@ -153,8 +153,11 @@ func (c *Client) Decode(chat string, msg *line.Message) Message {
 	item := Message{ID: msg.ID, From: msg.From, To: msg.To, CreatedTime: timestamp, ContentType: msg.ContentType,
 		ReplyTo: msg.RelatedMessageID, Reactions: msg.Reactions,
 		Encrypted: len(msg.Chunks) > 0 || msg.ContentMetadata["e2eeVersion"] != ""}
-	if msg.ContentType == 14 {
-		item.Status, item.FileName = "attachment", msg.ContentMetadata["FILE_NAME"]
+	if IsDownloadable(msg.ContentType) {
+		item.Status = "attachment"
+		if msg.ContentType == 14 {
+			item.FileName = msg.ContentMetadata["FILE_NAME"]
+		}
 	} else if msg.ContentType != 0 {
 		item.Status = "unsupported"
 	} else if !item.Encrypted {

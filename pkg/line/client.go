@@ -40,6 +40,7 @@ var (
 	ErrOBSObjectNotFound     = errors.New("LINE OBS object not found")
 	ErrOBSEncodingIncomplete = errors.New("LINE OBS object encoding incomplete")
 	ErrOBSObjectValidation   = errors.New("LINE OBS object validation failed")
+	ErrOBSSizeLimit          = errors.New("OBS object exceeds download size limit")
 )
 
 type Client struct {
@@ -943,7 +944,7 @@ func (c *Client) downloadOBSObject(ctx context.Context, obsURL, obsToken, messag
 	body, readErr := io.ReadAll(reader)
 	if maxBytes > 0 && int64(len(body)) > maxBytes {
 		resp.Body.Close()
-		return nil, errors.New("OBS object exceeds download size limit")
+		return nil, ErrOBSSizeLimit
 	}
 	resp.Body.Close()
 	if readErr != nil {

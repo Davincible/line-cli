@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/kongesque/line-cli/internal/input"
 	"github.com/kongesque/line-cli/internal/messaging"
@@ -249,16 +250,26 @@ func (a *App) selectMessage(chat, command string) (string, error) {
 		if command == "unsend" && m.From != a.promptAccount.mid {
 			continue
 		}
-		if command == "download" && m.ContentType != 14 {
+		if command == "download" && !messaging.IsDownloadable(m.ContentType) {
 			continue
 		}
 		body := messagePreview(m)
 		if r := []rune(body); len(r) > 90 {
 			body = string(r[:90]) + "…"
 		}
+		if command == "download" {
+			stamp := "Time unavailable"
+			if millis, err := m.CreatedTime.Int64(); err == nil && millis > 0 {
+				stamp = time.UnixMilli(millis).Local().Format("2006-01-02 15:04")
+			}
+			body += " · " + stamp
+		}
 		options = append(options, choice{m.ID, body + " · ID " + m.ID})
 	}
 	if len(options) == 0 {
+		if command == "download" {
+			return "", errors.New("no downloadable media among the latest 100 messages")
+		}
 		return "", errors.New("no eligible messages among the latest 100")
 	}
 	return a.choose("Choose a message to "+command, options, true)

@@ -34,6 +34,7 @@ OS標準の認証情報ストレージを利用できます。
 - 最近のメッセージ履歴を表示
 - 1行または複数行のテキストメッセージを送信
 - 最大20 MiBのファイルを送信
+- 最大20 MiBの画像・動画・音声・ファイルを指定パスまたはバイナリ標準出力にダウンロード
 - 既存のメッセージに返信
 - 標準リアクションを追加・削除
 - 自分が送ったメッセージを送信取消
@@ -183,6 +184,7 @@ line send "Alice" --file ./report.pdf
 line send "Alice" --text "Sounds good" --reply-to MESSAGE_ID
 line react "Alice" --message MESSAGE_ID --reaction love
 line download "Alice" --message MESSAGE_ID --output ./received.pdf
+line download "Alice" --message IMAGE_MESSAGE_ID --output ./photo.jpg
 ```
 
 オプションや使用例を確認するには、`line COMMAND --help` を実行してください。
@@ -227,7 +229,8 @@ LINE CLIは、LINEのChrome形式のプロトコルをもとに実装されて�
 - QRログインは実験的な機能です。Letter Sealingが無効なアカウントのQRログインには未対応です。
 - LINEが管理するChrome形式のセッションは、約168時間（7日）後に期限切れになる場合があります。CLIはローカルでの経過時間を理由にセッションを失効させず、可能な場合はトークンを更新します。認証が拒否された場合は、`line login` による再ログイン方法を案内します。詳しくは[セッションの有効期限](CLI.md#session-expiration)と[ヘッドレスサービスの運用](CLI.md#run-unattended)を参照してください。
 - 閲覧できるのは最近の履歴のみで、1回につき最大100件
-- 一般的なファイルの送受信のみ（スタンプやメディア専用メッセージには未対応）
+- 送信は一般的なファイルのみ（スタンプやメディア専用メッセージの送信には未対応）
+- メディアのダウンロードは最大20 MiB。外部メディアURLには未対応
 - メッセージを表示しても既読にはならない
 - より幅広い実環境での検証が必要なプロトコル処理が一部残っている
 

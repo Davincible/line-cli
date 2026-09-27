@@ -285,6 +285,9 @@ Use a message ID from `line messages CHAT --show-ids` or `--json`:
 
 ```sh
 line download "Alice" --message MESSAGE_ID --output ./received.pdf
+line download "Alice" --message IMAGE_MESSAGE_ID --output ./photo.jpg
+line download "Alice" --message VIDEO_MESSAGE_ID --output ./clip.mp4
+line download "Alice" --message AUDIO_MESSAGE_ID --output ./voice.m4a
 line react "Alice" --message MESSAGE_ID --reaction love
 line react "Alice" --message MESSAGE_ID --remove
 line unsend "Alice" --message MY_MESSAGE_ID
@@ -297,6 +300,35 @@ rules.
 These commands search the latest 100 messages in the selected chat. Downloads
 never overwrite an existing destination and verify encrypted data before saving.
 Remote metadata never controls the output path.
+
+`download` supports image (1), video (2), audio (3), and generic file (14)
+messages, up to 20 MiB each, with a two-minute transfer timeout. It retrieves
+full media rather than a thumbnail and saves the bytes unchanged; the output
+extension does not convert the format. Messages that specify an external
+`DOWNLOAD_URL` are currently unsupported. Reading or downloading never registers
+a group encryption key.
+
+For a pipeline, use `--output -` with an explicit chat and message ID:
+
+```sh
+# In Bash or another shell that supports pipefail:
+set -o pipefail
+line download CHAT_ID --message MESSAGE_ID --output - | consumer
+```
+
+Replace `consumer` with your OCR, archiving, or other binary-input command.
+Stdout contains only attachment bytes, without a trailing newline or summary;
+diagnostics go to stderr. This mode disables prompts, rejects `--json`, and
+refuses output to a terminal. Use `--output ./-` for a literal file named `-`.
+Use path mode with `--json` when you need the output path, byte count, and
+message ID as a JSON summary.
+
+Encrypted media is fully authenticated before the first byte is output. A
+download or authentication failure produces no attachment bytes. A broken pipe
+or cancellation after output begins can leave partial output; check exit status
+and use `pipefail` where supported. Prefer `--output PATH` when saving locally:
+shell redirection with `>` can truncate an existing file before the CLI runs,
+while path mode publishes the complete file without overwriting.
 
 ## Live events
 
@@ -702,7 +734,8 @@ DPAPI roundtrip and preflight tests against temporary files.
 - One saved LINE account per OS user.
 - QR login is experimental. QR login with Letter Sealing disabled is unsupported.
 - Recent history only, with at most 100 messages per read.
-- Generic files only; no stickers or specialized media sending.
+- Sending supports generic files only; no stickers or specialized media sending.
+- Downloads support images, video, audio, and files up to 20 MiB; external media URLs are unsupported.
 - Reading messages does not mark them as read.
 - Release binaries are not signed or notarized.
 - LINE protocol changes may affect compatibility.

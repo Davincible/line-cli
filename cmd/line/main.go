@@ -29,8 +29,9 @@ func run() int {
 	// out of both terminal output and pipelines; CLI errors provide safe context.
 	log.SetOutput(io.Discard)
 	app := &cli.App{
-		Interactive: term.IsTerminal(stdinFD) && (loggingIn || term.IsTerminal(int(os.Stdout.Fd()))),
-		Context:     ctx, WatchLock: session.WatchLock,
+		Interactive:      term.IsTerminal(stdinFD) && (loggingIn || term.IsTerminal(int(os.Stdout.Fd()))),
+		StdoutIsTerminal: term.IsTerminal(int(os.Stdout.Fd())),
+		Context:          ctx, WatchLock: session.WatchLock,
 		In:  in,
 		Out: os.Stdout, Err: os.Stderr, Version: version,
 		Manager: session.NewManager(session.KeychainStore{}), Lock: session.Lock,
