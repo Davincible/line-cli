@@ -14,6 +14,10 @@ import (
 
 var version = "dev"
 
+// Only official release builds opt into standalone updates; source builds keep
+// their installation method even when their version matches a published tag.
+var distribution = "source"
+
 func main() { os.Exit(run()) }
 
 func run() int {
@@ -33,7 +37,7 @@ func run() int {
 		StdoutIsTerminal: term.IsTerminal(int(os.Stdout.Fd())),
 		Context:          ctx, WatchLock: session.WatchLock,
 		In:  in,
-		Out: os.Stdout, Err: os.Stderr, Version: version,
+		Out: os.Stdout, Err: os.Stderr, Version: version, Distribution: distribution,
 		Manager: session.NewManager(session.KeychainStore{}), Lock: session.Lock,
 		Password: func() (string, error) {
 			return readPassword(ctx, stdinFD, in, os.Stderr)

@@ -60,6 +60,7 @@ try {
 
     New-Item -ItemType Directory -Force -Path $installDir -ErrorAction Stop | Out-Null
     Copy-Item -Force -LiteralPath $source -Destination (Join-Path $installDir "line.exe")
+    [System.IO.File]::WriteAllText((Join-Path $installDir ".line-cli-install"), "line-cli standalone v1`n", [System.Text.UTF8Encoding]::new($false))
 
     $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
     $pathEntries = @($userPath -split ";" | Where-Object { $_ })

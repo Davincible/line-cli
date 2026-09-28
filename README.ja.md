@@ -100,7 +100,7 @@ Homebrewはタグ付きリリースをソースからビルドし、`line` コ�
 この方法なら、署名されていないバイナリをブラウザからダウンロードした際に表示される
 Gatekeeperの警告を回避できます。
 
-後からアップグレードする場合は、次のコマンドを実行します。
+Homebrewでインストールした場合は、次のコマンドでアップグレードします。
 
 ```sh
 brew upgrade line-cli
@@ -137,6 +137,21 @@ Windowsでは、[PowerShell用のビルド手順](CLI.md#build-from-source)を�
 ソースからビルドした場合も、Linuxでは前述のキーリング環境が必要です。
 Windows PowerShellでの手順やコントリビューター向けのチェック項目については、
 [ソースビルドガイド](CLI.md#build-from-source)を参照してください。
+
+### LINE CLIを最新版に保つ
+
+```sh
+line update --check   # 現在のバージョン、最新版、次の操作を確認
+line update           # 対応する場合は更新し、それ以外は手順を表示
+```
+
+macOSとLinuxで公式インストーラーから導入した単体の実行ファイルは、
+その場で更新できます。Homebrew、Windows、ソースビルド、認識できない
+インストール方法では、それぞれに合った更新手順が表示されます。
+更新前に実行中のCLIコマンドとwatcherを停止してください。
+更新の確認にLINEへのログインは不要で、明示的にコマンドを実行したときだけ
+確認します。詳細とJSON出力については[LINE CLIの更新](CLI.md#updating-line-cli)を
+参照してください。
 
 ## ターミナルからLINEを使う
 

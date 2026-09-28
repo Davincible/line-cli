@@ -95,7 +95,7 @@ brew install kongesque/tap/line-cli
 Homebrew builds the tagged release from source and installs the `line` command.
 This avoids the Gatekeeper warning shown for unsigned browser downloads.
 
-Upgrade later with:
+For Homebrew installations, upgrade with:
 
 ```sh
 brew upgrade line-cli
@@ -131,6 +131,19 @@ On Windows, use the [PowerShell build commands](CLI.md#build-from-source).
 Source builds have the same Linux keyring requirements described above.
 See the [source-build guide](CLI.md#build-from-source) for Windows PowerShell
 instructions and contributor checks.
+
+### Keep LINE CLI up to date
+
+```sh
+line update --check   # Show installed/latest versions and the next step
+line update           # Install where supported, otherwise show upgrade instructions
+```
+
+Official standalone installations on macOS and Linux can update in place.
+Homebrew, Windows, source builds, and unrecognized installations receive
+instructions for their installation method. Stop commands and watchers before
+updating. Update checks require no LINE login and only run when requested.
+See [updating LINE CLI](CLI.md#updating-line-cli) for details and JSON output.
 
 ## Use LINE from the terminal
 
