@@ -92,7 +92,8 @@ Homebrew is also available on macOS:
 brew install kongesque/tap/line-cli
 ```
 
-Homebrew builds the tagged release from source and installs the `line` command.
+Homebrew installs the published macOS release for your Mac's architecture and
+manages the `line` command.
 This avoids the Gatekeeper warning shown for unsigned browser downloads.
 
 For Homebrew installations, upgrade with:
