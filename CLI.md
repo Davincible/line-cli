@@ -207,8 +207,34 @@ line chats --all --limit 50
 line chats --show-ids
 ```
 
-`contacts` and `chats` show 20 results by default. Use `--limit 0` for all
-results. `chats --all` includes inactive conversations.
+`contacts` lists friends. It and `chats` show 20 results by default. Use
+`--limit 0` for all results. `chats --all` includes inactive conversations.
+
+To resolve a person outside your friend list, supply their full user MID. For
+example, a group message's `from` field in `line messages CHAT_ID --json`
+identifies its sender. Replace `USER_MID` below with that ID:
+
+```sh
+line contacts --mid USER_MID
+line contacts --mid FIRST_USER_MID --mid SECOND_USER_MID --json
+```
+
+Repeat `--mid` for each ID. Direct lookup preserves case and first-seen input
+order, removes exact duplicates, and returns all requested unique IDs in batches
+of up to 100. It does not enumerate your friends or add anyone as a friend.
+Use user IDs, not group/room IDs, display names, or public LINE usernames.
+Supported forms are legacy `u` plus 32 lowercase hex digits and current `u`/`U`
+plus 43 base64url characters. IDs are validated before session access.
+
+Human output always shows each full ID beside its effective name; `--show-ids`
+is unnecessary for lookup. Your custom contact name takes precedence over the
+profile display name. An omitted profile is shown as `(unavailable)`; a returned
+profile without a usable name is shown as `(name unavailable)`. Unavailability
+does not establish whether an account was deleted or why access failed.
+
+`--mid` cannot be combined with `--search` or an explicit `--limit`, including
+`--limit 0`. Without `--mid`, existing friend-list search, sorting, limits, and
+JSON remain unchanged.
 
 Commands that accept `CHAT` support either:
 
@@ -378,6 +404,7 @@ Important JSON fields include:
 | --- | --- |
 | `whoami` | Account profile and ID |
 | `contacts` | Contact names and IDs |
+| `contacts --mid MID` | One record per unique requested MID, contact fields, effective name, and lookup status |
 | `chats` | Chat ID, type, unread count, and optional activity time |
 | `messages` | Message ID, sender, timestamp, content, encryption, and status |
 | `send` | Message ID, chat ID, encryption, group-key registration, and sequence |
@@ -388,6 +415,25 @@ Important JSON fields include:
 If some history entries cannot be decrypted, `messages --json` still writes the
 complete array with per-message failure statuses, then exits with status 1. It
 never prints encrypted chunks or raw server response bodies.
+
+`contacts --mid MID --json` always writes an array, even for one ID. Each record
+retains the contact fields `mid`, `displayName`, `displayNameOverridden`,
+`statusMessage`, and `picturePath`, and adds:
+
+| Field | Meaning |
+| --- | --- |
+| `effectiveDisplayName` | Custom name when set, otherwise the profile name; empty if no name is available |
+| `status` | `resolved` when LINE returns a profile, or `unavailable` when it omits that MID |
+
+Unavailable rows retain the requested `mid` and have empty name/profile fields.
+A resolved profile can still have an empty name; consumers should then display
+the MID as a fallback. Map results by `mid`, since duplicates produce one row.
+All resolved profiles return exit status 0. If any profiles are unavailable,
+the command writes the complete array, reports the count on stderr, and exits 1.
+Scripts should retain that JSON when handling a partial result. Network,
+authentication, or malformed-response failures produce no result array, even if
+an earlier batch succeeded; storage failures retain their dedicated exit codes.
+This command does not add names to `messages --json` or `watch` events.
 
 ## Sessions and credential storage
 

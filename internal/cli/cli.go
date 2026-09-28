@@ -22,7 +22,7 @@ Usage: line <command> [options]
 Everyday commands:
   login       Sign in by QR code (--email ADDRESS for email login)
   whoami      Show your signed-in account
-  contacts    Find people (--search NAME)
+  contacts    Find friends (--search NAME) or look up people (--mid MID)
   chats       Browse recent conversations
   messages    Choose a chat and read messages
   send        Choose a recipient and write a message
