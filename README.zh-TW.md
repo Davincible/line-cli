@@ -79,7 +79,7 @@ line auth status --check
 
 升級前請先停止正在執行的 CLI 指令與 watcher；不支援新舊版本同時執行。
 完整需求、服務設定、支援的 systemd 版本與復原方式請參閱
-[CLI 指南](CLI.md#headless-linux)。
+[CLI 指南](CLI.md#linux-servers-and-headless-storage)。
 
 macOS 也可以使用 Homebrew：
 
@@ -131,9 +131,7 @@ Windows 請使用 [PowerShell 建置指令](CLI.md#build-from-source)。
 `line login` 預設使用互動式 QR 碼登入，請用手機上的 LINE 掃描終端機顯示的
 QR 碼。`line login --email ADDRESS` 則保留電子郵件與密碼登入方式。
 
-> [!IMPORTANT]
-> QR 登入為實驗功能。需要時可使用 `line login --email ADDRESS` 進行電子郵件與密碼登入。
-> 詳見[登入選項與限制](CLI.md#login)。
+詳見[登入選項與限制](CLI.md#login-options-and-qr-help)。
 
 ```sh
 line login
@@ -149,7 +147,7 @@ line send "Alice" --text "Hello!"
 `line login --qr-url` 顯示一次性敏感資料，再交由可信任的本機工具產生 QR 碼；
 不要分享、儲存或上傳至線上產生器。SSH 與 `--headless` 登入仍需互動式終端機。
 在無頭 Linux 上，可使用 `line login --headless --email you@example.com`
-進行電子郵件登入，或使用 `line login --headless` 進行實驗性的 QR 登入。
+進行電子郵件登入，或使用 `line login --headless` 進行 QR 登入。
 
 以參數指定名稱時，名稱必須完全相符，且不得與其他名稱重複。若要透過
 互動介面選擇聊天室，執行指令時不要提供目標：
@@ -208,8 +206,8 @@ LINE CLI 採用 LINE Chrome 類型的通訊協定。伺服器端的變更可能�
 ## 目前限制
 
 - 每位作業系統使用者只能儲存一個帳號
-- QR 登入為實驗功能，不支援已關閉 Letter Sealing 的帳號。
-- 一般約 168 小時（7 天）的存取權杖更新週期，會由 V3 自動更新機制處理，CLI 重新啟動後也適用。只有在無法透過更新權杖恢復存取，或 LINE 明確使工作階段失效時，才需要手動登入。詳見[權杖更新與工作階段失效](CLI.md#token-refresh-and-session-invalidation)與[無頭服務部署](CLI.md#run-unattended)。
+- QR 登入不支援已關閉 Letter Sealing 的帳號。
+- 一般約 168 小時（7 天）的存取權杖更新週期，會由 V3 自動更新機制處理，CLI 重新啟動後也適用。只有在無法透過更新權杖恢復存取，或 LINE 明確使工作階段失效時，才需要手動登入。詳見[權杖更新與工作階段失效](CLI.md#token-refresh)與[無頭服務部署](CLI.md#run-a-watcher-without-a-login-session)。
 - 只能讀取近期記錄，每次最多 100 則訊息
 - 傳送僅支援一般檔案，不支援貼圖或特殊媒體訊息傳送
 - 媒體下載上限為 20 MiB，不支援外部媒體網址

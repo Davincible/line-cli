@@ -482,17 +482,34 @@ func (c *Client) GetContactsV2(mids []string) (*ContactsResponse, error) {
 		return nil, err
 	}
 	var wrapper struct {
-		Code    int              `json:"code"`
-		Message string           `json:"message"`
-		Data    ContactsResponse `json:"data"`
+		Code    int    `json:"code"`
+		Message string `json:"message"`
+		Data    struct {
+			Contacts map[string]*struct {
+				Contact *Contact `json:"contact"`
+			} `json:"contacts"`
+		} `json:"data"`
 	}
 	if err := json.Unmarshal(resp, &wrapper); err != nil {
-		return nil, err
+		// Decoder errors can include private map keys from the response.
+		return nil, errors.New("getContactsV2 returned an invalid contacts response")
 	}
 	if wrapper.Code != 0 {
 		return nil, fmt.Errorf("getContactsV2 failed: %s", wrapper.Message)
 	}
-	return &wrapper.Data, nil
+	if wrapper.Data.Contacts == nil {
+		return nil, errors.New("getContactsV2 returned no contacts map")
+	}
+	result := &ContactsResponse{Contacts: make(map[string]ContactWrapper, len(wrapper.Data.Contacts))}
+	for mid, entry := range wrapper.Data.Contacts {
+		// An omitted map entry is unavailable. A present entry must contain a
+		// profile; null/missing wrappers must not become resolved empty contacts.
+		if entry == nil || entry.Contact == nil {
+			return nil, errors.New("getContactsV2 returned an invalid contact entry")
+		}
+		result.Contacts[mid] = ContactWrapper{Contact: *entry.Contact}
+	}
+	return result, nil
 }
 
 // GetBuddyProfile fetches the profile of a LINE official/business account (buddy).
