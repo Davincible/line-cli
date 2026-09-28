@@ -90,7 +90,7 @@ brew install kongesque/tap/line-cli
 Homebrew 會從含版本標籤的原始碼建置，並安裝 `line` 指令。這種安裝方式
 可避免從瀏覽器下載未簽署檔案時出現的 Gatekeeper 警告。
 
-日後可用以下指令升級：
+若使用 Homebrew 安裝，可用以下指令升級：
 
 ```sh
 brew upgrade line-cli
@@ -125,6 +125,19 @@ Windows 請使用 [PowerShell 建置指令](CLI.md#build-from-source)。
 
 從原始碼建置時，仍須符合上述 Linux 金鑰圈需求。Windows PowerShell
 指令與貢獻者檢查方式請參閱[原始碼建置指南](CLI.md#build-from-source)。
+
+### 保持 LINE CLI 為最新版本
+
+```sh
+line update --check   # 查看目前版本、最新版本及後續操作
+line update           # 支援時直接安裝，否則顯示升級指引
+```
+
+在 macOS 與 Linux 上，透過官方安裝程式安裝的獨立執行檔可直接更新。
+Homebrew、Windows、原始碼建置及無法辨識的安裝方式，則會顯示對應的
+升級指引。更新前請先停止正在執行的 CLI 指令與 watcher。
+檢查更新不需要登入 LINE，而且只會在你執行指令時進行。
+詳細行為與 JSON 輸出請參閱[更新 LINE CLI](CLI.md#updating-line-cli)。
 
 ## 在終端機使用 LINE
 
