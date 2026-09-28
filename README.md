@@ -83,7 +83,7 @@ line auth status --check
 ```
 
 Before upgrading, stop existing CLI commands and watchers; running old and new
-versions together is unsupported. See [CLI.md](CLI.md#headless-linux) for setup,
+versions together is unsupported. See [CLI.md](CLI.md#linux-servers-and-headless-storage) for setup,
 service guidance, supported systemd versions, and recovery instructions.
 
 Homebrew is also available on macOS:
@@ -137,9 +137,7 @@ instructions and contributor checks.
 `line login` now selects interactive QR login: scan the terminal code with LINE
 on your phone. `line login --email ADDRESS` keeps the email/password flow.
 
-> [!IMPORTANT]
-> QR login is experimental. Email/password login remains available with
-> `line login --email ADDRESS`. See [login options and limitations](CLI.md#login).
+See [login options and limitations](CLI.md#login-options-and-qr-help).
 
 ```sh
 line login
@@ -156,7 +154,7 @@ go to stderr; only completion output goes to stdout. For a narrow or accessible 
 local QR tool; do not share or save it, or use an online generator. Login remains
 interactive, including over SSH and with `--headless`. On headless Linux, use
 `line login --headless --email you@example.com` for email login or
-`line login --headless` for experimental QR login.
+`line login --headless` for QR login.
 
 Names must be unique exact matches when passed as arguments. Run a command
 without a target to choose a chat interactively:
@@ -216,8 +214,8 @@ compatibility.
 ## Current limitations
 
 - One saved account per OS user
-- QR login is experimental. QR login with Letter Sealing disabled is not supported.
-- The normal approximately 168-hour (7-day) access-token boundary is handled by automatic V3 refresh, including after a restart. Manual login is needed only when refresh credentials cannot recover access or LINE explicitly invalidates the session. See [token refresh and session invalidation](CLI.md#token-refresh-and-session-invalidation) and [headless service deployment](CLI.md#run-unattended).
+- QR login with Letter Sealing disabled is not supported.
+- The normal approximately 168-hour (7-day) access-token boundary is handled by automatic V3 refresh, including after a restart. Manual login is needed only when refresh credentials cannot recover access or LINE explicitly invalidates the session. See [token refresh and session invalidation](CLI.md#token-refresh) and [headless service deployment](CLI.md#run-a-watcher-without-a-login-session).
 - Recent history only, up to 100 messages per read
 - Sending supports generic files only; no stickers or specialized media sending
 - Media downloads are limited to 20 MiB; external media URLs are unsupported

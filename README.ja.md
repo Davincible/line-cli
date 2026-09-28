@@ -87,7 +87,7 @@ line auth status --check
 
 アップグレード前に、実行中のCLIコマンドとwatcherを停止してください。
 新旧バージョンの同時実行には対応していません。詳しい要件、サービスの設定、
-対応するsystemdのバージョン、復旧方法は[CLIガイド](CLI.md#headless-linux)を
+対応するsystemdのバージョン、復旧方法は[CLIガイド](CLI.md#linux-servers-and-headless-storage)を
 参照してください。
 
 macOSではHomebrewも利用できます。
@@ -144,10 +144,7 @@ Windows PowerShellでの手順やコントリビューター向けのチェッ�
 ターミナルのQRコードを読み取ります。`line login --email ADDRESS` では、
 従来のメールアドレスとパスワードによるログインを利用できます。
 
-> [!IMPORTANT]
-> QRログインは実験的な機能です。必要に応じて `line login --email ADDRESS` で
-> メールアドレスとパスワードによるログインを利用できます。
-> 詳しくは[ログインのオプションと制限](CLI.md#login)をご覧ください。
+詳しくは[ログインのオプションと制限](CLI.md#login-options-and-qr-help)をご覧ください。
 
 ```sh
 line login
@@ -164,7 +161,7 @@ stderrに、成功メッセージはstdoutに出力されます。幅の狭い�
 一時的な値を表示し、信頼できるローカルツールでQRコードに変換できます。
 共有、保存、オンライン生成サービスへの送信は避けてください。
 SSHや `--headless` でも対話式ターミナルが必要です。ヘッドレスLinuxでは、
-メールログインに `line login --headless --email you@example.com`、実験的な
+メールログインに `line login --headless --email you@example.com`、
 QRログインに `line login --headless` を利用できます。
 
 名前を引数で指定する場合は、重複のない完全一致でなければなりません。
@@ -226,8 +223,8 @@ LINE CLIは、LINEのChrome形式のプロトコルをもとに実装されて�
 ## 現在の制限事項
 
 - 保存できるアカウントはOSユーザーごとに1つ
-- QRログインは実験的な機能です。Letter Sealingが無効なアカウントのQRログインには未対応です。
-- 通常、約168時間（7日）のアクセストークン更新はV3の自動更新で処理され、CLIを再起動した後も自動で更新されます。リフレッシュトークンでアクセスを復旧できない場合、またはLINEが明示的にセッションを無効化した場合にのみ、手動でのログインが必要です。詳しくは[トークン更新とセッションの無効化](CLI.md#token-refresh-and-session-invalidation)と[ヘッドレスサービスの運用](CLI.md#run-unattended)を参照してください。
+- Letter Sealingが無効なアカウントのQRログインには未対応です。
+- 通常、約168時間（7日）のアクセストークン更新はV3の自動更新で処理され、CLIを再起動した後も自動で更新されます。リフレッシュトークンでアクセスを復旧できない場合、またはLINEが明示的にセッションを無効化した場合にのみ、手動でのログインが必要です。詳しくは[トークン更新とセッションの無効化](CLI.md#token-refresh)と[ヘッドレスサービスの運用](CLI.md#run-a-watcher-without-a-login-session)を参照してください。
 - 閲覧できるのは最近の履歴のみで、1回につき最大100件
 - 送信は一般的なファイルのみ（スタンプやメディア専用メッセージの送信には未対応）
 - メディアのダウンロードは最大20 MiB。外部メディアURLには未対応
