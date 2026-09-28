@@ -8,7 +8,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"sort"
 	"strings"
 	"unicode"
 
@@ -96,6 +95,8 @@ func (a *App) Run(args []string) error {
 		return a.actionCommand(command, args[1:])
 	case "watch":
 		return a.watchCommand(args[1:])
+	case "contacts":
+		return a.contactsCommand(args[1:])
 	case "chats":
 		return a.chatCommand(args[1:])
 	case "messages", "send":
@@ -110,7 +111,7 @@ func (a *App) Run(args []string) error {
 		}
 		_, err := io.WriteString(a.Out, help)
 		return err
-	case "whoami", "contacts", "logout":
+	case "whoami", "logout":
 	default:
 		return errors.New("unknown command; run line help")
 	}
@@ -119,16 +120,8 @@ func (a *App) Run(args []string) error {
 	fs.Usage = func() { fmt.Fprintf(a.Err, "Usage: line %s [options]\n", command); fs.PrintDefaults() }
 	var jsonOutput bool
 	var showIDs bool
-	var search string
-	limit := 20
-	if command == "contacts" {
-		fs.StringVar(&search, "search", "", "find contacts by name")
-		fs.IntVar(&limit, "limit", 20, "maximum rows; 0 shows all")
-	}
-	if command == "contacts" || command == "whoami" {
+	if command == "whoami" {
 		fs.BoolVar(&showIDs, "show-ids", false, "show full IDs")
-	}
-	if command == "whoami" || command == "contacts" {
 		fs.BoolVar(&jsonOutput, "json", false, "write JSON to stdout")
 	}
 	if err := fs.Parse(args[1:]); err != nil {
@@ -139,9 +132,6 @@ func (a *App) Run(args []string) error {
 	}
 	if fs.NArg() != 0 {
 		return errors.New("unexpected arguments; run line " + command + " --help")
-	}
-	if limit < 0 {
-		return errors.New("limit must be 0 or greater")
 	}
 	unlock, err := a.lock()
 	if err != nil {
@@ -173,50 +163,6 @@ func (a *App) Run(args []string) error {
 		if err == nil && showIDs {
 			_, err = fmt.Fprintf(a.Out, "ID: %s\n", terminalText(profile.Mid))
 		}
-		return err
-	case "contacts":
-		contacts, err := a.contacts()
-		if err != nil {
-			return err
-		}
-		filtered := make([]line.Contact, 0, len(contacts))
-		for _, c := range contacts {
-			if strings.Contains(strings.ToLower(c.EffectiveDisplayName()), strings.ToLower(search)) {
-				filtered = append(filtered, c)
-			}
-		}
-		limitSet := false
-		fs.Visit(func(f *flag.Flag) {
-			if f.Name == "limit" {
-				limitSet = true
-			}
-		})
-		if jsonOutput && !limitSet {
-			limit = 0
-		}
-		total := len(filtered)
-		if limit > 0 {
-			filtered = filtered[:min(limit, total)]
-		}
-		if jsonOutput {
-			return a.json(filtered)
-		}
-		if total == 0 {
-			_, err = fmt.Fprintln(a.Out, "No contacts found. Try a different --search.")
-			return err
-		}
-		fmt.Fprintln(a.Out, "CONTACT")
-		for _, c := range filtered {
-			name := c.EffectiveDisplayName()
-			if name == "" {
-				name = c.Mid
-			}
-			fmt.Fprintln(a.Out, terminalText(name))
-			if showIDs && name != c.Mid {
-				fmt.Fprintln(a.Out, "  "+terminalText(c.Mid))
-			}
-		}
-		_, err = fmt.Fprintf(a.Out, "\nShowing %d of %d contacts. Find someone: line contacts --search NAME\n", len(filtered), total)
 		return err
 	}
 	return nil
@@ -281,43 +227,6 @@ func (a *App) json(value any) error {
 	enc := json.NewEncoder(a.Out)
 	enc.SetIndent("", "  ")
 	return enc.Encode(value)
-}
-
-func (a *App) contacts() ([]line.Contact, error) {
-	var ids []string
-	if err := a.Manager.Do(func(api session.API) (err error) { ids, err = api.GetAllContactIds(); return }); err != nil {
-		return nil, err
-	}
-	result := make([]line.Contact, 0, len(ids))
-	seen := make(map[string]bool)
-	for start := 0; start < len(ids); start += 100 {
-		end := min(start+100, len(ids))
-		var response *line.ContactsResponse
-		if err := a.Manager.Do(func(api session.API) (err error) { response, err = api.GetContactsV2(ids[start:end]); return }); err != nil {
-			return nil, err
-		}
-		if response == nil {
-			return nil, errors.New("LINE returned an empty contacts response")
-		}
-		for mid, wrapper := range response.Contacts {
-			contact := wrapper.Contact
-			if contact.Mid == "" {
-				contact.Mid = mid
-			}
-			if !seen[contact.Mid] {
-				result = append(result, contact)
-				seen[contact.Mid] = true
-			}
-		}
-	}
-	sort.Slice(result, func(i, j int) bool {
-		a, b := result[i].EffectiveDisplayName(), result[j].EffectiveDisplayName()
-		if a == b {
-			return result[i].Mid < result[j].Mid
-		}
-		return a < b
-	})
-	return result, nil
 }
 
 // Chat deliberately excludes LastMessages: this command lists conversations
