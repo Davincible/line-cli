@@ -87,7 +87,7 @@ func (a *App) updateCommand(args []string) error {
 		}
 		fmt.Fprintln(a.Out, p.Instructions)
 		if p.UpgradeCommand != "" {
-			fmt.Fprintln(a.Out, "\n  "+p.UpgradeCommand)
+			fmt.Fprintln(a.Out, "\n  "+terminalText(p.UpgradeCommand))
 		}
 		_, err = fmt.Fprintln(a.Out, "\nRelease notes: "+p.ReleaseURL)
 	}

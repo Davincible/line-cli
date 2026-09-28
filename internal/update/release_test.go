@@ -145,3 +145,41 @@ func TestChecksumSelection(t *testing.T) {
 		t.Fatal(got, err)
 	}
 }
+
+func TestWindowsGuidancePreservesCustomDirectory(t *testing.T) {
+	s := testService(t)
+	oldPath, _ := s.executable()
+	dir := filepath.Join(filepath.Dir(oldPath), "someone's custom directory")
+	if err := os.Mkdir(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "line.exe")
+	if err := os.WriteFile(path, []byte("executable"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, receiptName), []byte(receiptContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+	s.executable = func() (string, error) { return path, nil }
+	s.goos = "windows"
+	s.client = &http.Client{Transport: transport(func(*http.Request) (*http.Response, error) { return response(200, metadata("v0.3.1")), nil })}
+	p, err := s.Check(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.CanSelfUpdate || !strings.Contains(p.UpgradeCommand, "someone''s custom directory") || !strings.Contains(p.UpgradeCommand, "LINE_CLI_INSTALL_DIR") {
+		t.Fatalf("incorrect Windows guidance: %+v", p)
+	}
+}
+
+func TestNoUpgradeInstructionsWhenCurrentOrAhead(t *testing.T) {
+	for _, version := range []string{"v0.3.1", "v0.4.0"} {
+		s := testService(t)
+		s.current = version
+		s.client = &http.Client{Transport: transport(func(*http.Request) (*http.Response, error) { return response(200, metadata("v0.3.1")), nil })}
+		p, err := s.Check(context.Background())
+		if err != nil || p.Instructions != "" || p.UpgradeCommand != "" {
+			t.Fatalf("unexpected upgrade instructions: %+v %v", p, err)
+		}
+	}
+}

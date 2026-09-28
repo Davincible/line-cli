@@ -72,8 +72,10 @@ func (s *Service) Check(ctx context.Context) (Plan, error) {
 		p.Instructions = "Built from source. Stop LINE CLI commands and watchers, check out " + r.Tag + " in your source checkout, then follow the source-build instructions in CLI.md."
 	case "standalone":
 		if s.goos == "windows" {
-			p.UpgradeCommand = "irm https://raw.githubusercontent.com/kongesque/line-cli/" + r.Tag + "/scripts/install-release.ps1 | iex"
-			p.Instructions = "Stop LINE CLI commands and watchers, then run the installer in PowerShell. For a custom installation directory, set LINE_CLI_INSTALL_DIR to the directory shown above first."
+			// Quote PowerShell literals, including custom directories with apostrophes.
+			installDir := "'" + strings.ReplaceAll(filepath.Dir(path), "'", "''") + "'"
+			p.UpgradeCommand = "$env:LINE_CLI_INSTALL_DIR = " + installDir + "; irm https://raw.githubusercontent.com/kongesque/line-cli/" + r.Tag + "/scripts/install-release.ps1 | iex"
+			p.Instructions = "Stop LINE CLI commands and watchers, then run this in PowerShell. The command preserves your installation directory."
 		} else if p.CanSelfUpdate {
 			p.Instructions = "Run line update to install this release. Stop other LINE CLI commands and watchers first."
 		} else {

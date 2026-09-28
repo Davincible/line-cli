@@ -328,6 +328,66 @@ Use `revision` to remove duplicates in consumers. If the process stops between
 writing an event and saving its checkpoint, the last event may appear again.
 Only one watcher can run at a time.
 
+## Updating LINE CLI
+
+```sh
+line update --check
+line update
+line update --check --json
+```
+
+`update` shows the installed version, the latest stable GitHub release, the
+installation method, and the executable it found. It works without signing in
+to LINE. `--check` only checks and shows the next step; it never installs or
+acquires session locks. Messaging commands do not check for updates.
+
+| Installation | `line update` behavior |
+| --- | --- |
+| Official standalone installer on macOS/Linux | Downloads, verifies, and replaces the executable when a newer stable release exists. |
+| Homebrew | Prints `brew upgrade line-cli`; Homebrew retains ownership of the executable. |
+| Official standalone installer on Windows | Prints a PowerShell installer command to run after this command exits. |
+| Source build | Points to the release tag and source-build instructions. |
+| Unrecognized installation | Shows the release page and asks you to use your original installation method. |
+
+Self-update requires both an official release build and the `.line-cli-install`
+receipt beside the executable, written by the official installers. A manually
+copied binary, an older installation without this receipt, or a source build is
+not automatically replaced. Use your original installation method to upgrade;
+rerunning the official installer also creates the receipt. Custom standalone
+installation directories are supported. The Windows upgrade command sets
+`LINE_CLI_INSTALL_DIR` to the detected directory, preserving custom locations.
+
+Stop existing commands and watchers, including any service that restarts a
+watcher, before updating. Automatic replacement holds the watcher and session
+locks without reading credentials. It refuses to proceed when either lock is
+unavailable. Do not run an external installer concurrently.
+
+The updater downloads assets from the checked release tag, verifies the archive
+against that release's SHA-256 checksums, and stages the executable in the same
+directory before replacing it with an atomic rename. Download, checksum, and
+extraction failures leave the installed executable intact. Downloads and archive
+extraction have size limits. It does not use sudo, retry installation, downgrade
+newer versions, or guess the ordering of development/prerelease builds.
+
+`--json` writes one result to stdout, with diagnostics on stderr, and follows
+the same installation behavior as human-readable output. Use **both `--check`
+and `--json`** for a read-only check. Fields include `current_version`,
+`latest_version`, `status`, `installation`, `executable`, `can_self_update`,
+`release_url`, and optional `instructions` and `upgrade_command`.
+
+Check statuses are `update_available`, `up_to_date`, `ahead`, and
+`unknown_version`. Successful installation returns `updated`; a failed attempt
+returns `failed`. `updated_unconfirmed` means replacement happened but the
+directory could not be synced: check `line version` before retrying. The
+`current_version` field always records the version that started the command;
+after `updated`, `latest_version` is the installed version. `can_self_update`
+describes support, not whether a newer version exists.
+
+Successful checks and manual instructions exit 0, including when an update is
+available. Check or installation failures exit nonzero. If the initial check
+fails, no JSON result is written; after an installation failure, the result is
+written before the error exit. Cancellation uses the usual signal exit codes.
+
 ## Use from scripts
 
 ### JSON output and exit codes
@@ -359,6 +419,7 @@ Ordinary CLI and network errors exit 1. Storage errors have
 | `download` | Output path, byte count, and message ID. |
 | `react`, `unsend` | Action, chat ID, message ID, and sequence. |
 | `watch` | One JSON event per line. |
+| `update` | Installed/latest versions, status, installation method, and next step. Use `--check --json` to only check. |
 
 If some messages cannot be decrypted, `messages --json` still writes the full
 array with a status for each message, then exits 1. It never prints encrypted
@@ -679,6 +740,7 @@ line chats --help
 line messages --help
 line send --help
 line watch --help
+line update --help
 ```
 
 ### Build from source
