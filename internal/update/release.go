@@ -92,7 +92,11 @@ func (s *Service) get(ctx context.Context, url string) (*http.Response, error) {
 		return nil, errors.New("invalid release URL")
 	}
 	req.Header.Set("User-Agent", "line-cli-updater")
-	req.Header.Set("Accept", "application/vnd.github+json")
+	if url == latestAPI {
+		req.Header.Set("Accept", "application/vnd.github+json")
+	} else {
+		req.Header.Set("Accept", "application/octet-stream")
+	}
 	resp, err := s.client.Do(req)
 	if err != nil {
 		if ctx.Err() != nil {
@@ -123,11 +127,14 @@ func (s *Service) latest(ctx context.Context) (release, error) {
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxMetadata+1))
+	if ctx.Err() != nil {
+		return release{}, ctx.Err()
+	}
 	if err != nil || len(body) > maxMetadata {
 		return release{}, errors.New("could not read GitHub release information; try again later")
 	}
 	var r release
-	if json.Unmarshal(body, &r) != nil || r.Draft || r.Prerelease || !stableVersion.MatchString(r.Tag) {
+	if json.Unmarshal(body, &r) != nil || r.Draft || r.Prerelease || len(r.Tag) > 128 || !stableVersion.MatchString(r.Tag) {
 		return release{}, errors.New("GitHub returned unsupported release information; no files were changed")
 	}
 	return r, nil

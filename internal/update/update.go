@@ -3,6 +3,7 @@ package update
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -16,6 +17,7 @@ const receiptName = ".line-cli-install"
 const receiptContent = "line-cli standalone v1\n"
 
 type Plan struct {
+	original       os.FileInfo
 	CurrentVersion string `json:"current_version"`
 	LatestVersion  string `json:"latest_version"`
 	Status         string `json:"status"`
@@ -50,6 +52,10 @@ func (s *Service) Check(ctx context.Context) (Plan, error) {
 		return p, errors.New("could not resolve this executable; check releases at " + repositoryURL + "/releases/latest")
 	}
 	p.Executable = path
+	p.original, err = os.Lstat(path)
+	if err != nil {
+		return p, errors.New("could not inspect the installed executable")
+	}
 	p.Installation = s.installation(path)
 	r, err := s.latest(ctx)
 	if err != nil {
@@ -80,6 +86,9 @@ func (s *Service) Check(ctx context.Context) (Plan, error) {
 		p.CanSelfUpdate = false
 		p.Instructions = "This release does not yet have verified download links for your platform. Check the release page or try again later."
 	}
+	if p.Status == "up_to_date" || p.Status == "ahead" {
+		p.Instructions, p.UpgradeCommand = "", ""
+	}
 	return p, nil
 }
 
@@ -103,7 +112,12 @@ func (s *Service) installation(path string) string {
 	if err != nil || !info.Mode().IsRegular() || info.Size() != int64(len(receiptContent)) {
 		return "unknown"
 	}
-	data, err := os.ReadFile(marker)
+	f, err := os.Open(marker)
+	if err != nil {
+		return "unknown"
+	}
+	defer f.Close()
+	data, err := io.ReadAll(io.LimitReader(f, int64(len(receiptContent)+1)))
 	if err != nil || string(data) != receiptContent {
 		return "unknown"
 	}

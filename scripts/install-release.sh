@@ -74,6 +74,11 @@ trap 'rm -rf "$temporary_dir"; rm -f "$temporary_binary"' EXIT HUP INT TERM
 cp "$temporary_dir/extracted/line" "$temporary_binary"
 chmod 755 "$temporary_binary"
 mv -f "$temporary_binary" "$install_dir/line"
+# A source build never opts into self-update, even if this receipt remains.
+# Reuse the temporary path so the receipt is also published atomically.
+printf '%s\n' 'line-cli standalone v1' > "$temporary_binary"
+chmod 644 "$temporary_binary"
+mv -f "$temporary_binary" "$install_dir/.line-cli-install"
 
 printf 'Installed LINE CLI: %s\n' "$install_dir/line"
 case ":$PATH:" in

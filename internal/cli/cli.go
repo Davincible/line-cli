@@ -35,6 +35,7 @@ More commands:
   react       Add or remove a reaction
   unsend      Retract one of your own messages
   version     Show the installed version
+  update      Update LINE CLI or show upgrade instructions (--check to preview)
   help        Show this help
 
 Examples:
@@ -66,6 +67,8 @@ type App struct {
 	Password         func() (string, error)
 	Continue         func() error
 	Version          string
+	Distribution     string
+	Updater          updater
 	NewHeadlessLogin func() (session.LoginStorage, error)
 	MigrateHeadless  func(bool) error
 }
@@ -85,6 +88,8 @@ func (a *App) Run(args []string) error {
 		command = "version"
 	}
 	switch command {
+	case "update":
+		return a.updateCommand(args[1:])
 	case "login":
 		return a.loginCommand(args[1:])
 	case "auth":
