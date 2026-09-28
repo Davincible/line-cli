@@ -96,7 +96,8 @@ macOSではHomebrewも利用できます。
 brew install kongesque/tap/line-cli
 ```
 
-Homebrewはタグ付きリリースをソースからビルドし、`line` コマンドをインストールします。
+HomebrewはMacのアーキテクチャに合った公開済みのmacOS版をインストールし、
+`line` コマンドを管理します。
 この方法なら、署名されていないバイナリをブラウザからダウンロードした際に表示される
 Gatekeeperの警告を回避できます。
 

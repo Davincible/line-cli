@@ -87,7 +87,7 @@ macOS 也可以使用 Homebrew：
 brew install kongesque/tap/line-cli
 ```
 
-Homebrew 會從含版本標籤的原始碼建置，並安裝 `line` 指令。這種安裝方式
+Homebrew 會依 Mac 的架構安裝已發布的 macOS 發行檔，並管理 `line` 指令。這種安裝方式
 可避免從瀏覽器下載未簽署檔案時出現的 Gatekeeper 警告。
 
 若使用 Homebrew 安裝，可用以下指令升級：
