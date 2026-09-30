@@ -1,272 +1,272 @@
-# LINE CLI：ターミナルから個人のLINEを操作
+# LINE CLI：個人のLINEアカウント向けコマンドラインクライアント
 
-[繁體中文（台灣）](README.zh-TW.md) | [ภาษาไทย](README.th.md) | 日本語 | [English](README.md)
+**LINE CLI** は、Goで書かれた非公式のオープンソースLINEコマンドラインクライアントです。
+ターミナルからLINEメッセージを送信し、個人やグループのトークを閲覧したり、
+ファイルを共有したり、添付ファイルをダウンロードしたり、リアルタイムイベントを
+受信したりできます。日常の操作には対話式の入力を、シェルスクリプトや
+AIエージェントのワークフローにはJSON出力を利用できます。
 
-**LINE CLI** は、個人のLINEアカウントをターミナルから操作するための
-非公式コマンドラインクライアントです。メッセージの閲覧・送信をはじめ、
-ファイルの共有、返信、リアクション、送信取消、リアルタイムイベントの監視に
-対応しています。JSONを利用すれば、シェルスクリプトやAIエージェントの
-ワークフローに組み込むこともできます。
-
-LINE Messaging APIを使う一般的なツールとは異なり、ボットアカウントではなく、
-普段お使いの個人アカウントで動作します。
-
-![個人のLINEをターミナルから操作できるLINE CLI](banner.png)
+**macOS、Linux、Windows**に対応し、トークが対応している場合はLetter Sealingで
+エンドツーエンド暗号化を行います。個人のLINEアカウントでログインでき、
+ボットアカウントの作成やLINE Messaging APIの設定は不要です。
 
 [![CI](https://github.com/kongesque/line-cli/actions/workflows/cli.yml/badge.svg)](https://github.com/kongesque/line-cli/actions/workflows/cli.yml)
 [![Release](https://img.shields.io/github/v/release/kongesque/line-cli?filter=v*&label=release)](https://github.com/kongesque/line-cli/releases/latest)
 [![Go](https://img.shields.io/github/go-mod/go-version/kongesque/line-cli)](go.mod)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-macOS、Linux、Windowsに対応し、Letter Sealingによるエンドツーエンド暗号化と、
-OS標準の認証情報ストレージを利用できます。
+[インストール](#install-line-cli) · [クイックスタート](#quick-start-send-your-first-line-message) · [コマンド](#line-messaging-commands) · [自動化](#automate-line-with-json-and-shell-scripts) · [詳しいガイド](CLI.md)
 
-> [!IMPORTANT]
-> LINEで同時に利用できるChrome形式のセッションは1つだけです。`line` で
-> ログインすると、既存のLINE Chrome拡張機能や、同じ形式を使う別のクライアントの
-> セッションが置き換えられる場合があります。また、保存できるアカウントは
-> OSユーザーごとに1つです。
+[English](README.md) | [繁體中文（台灣）](README.zh-TW.md) | [ภาษาไทย](README.th.md) | 日本語
 
-## 主な機能
+![LINE CLI：ターミナルから個人のLINEでメッセージ送信、ファイル共有、自動化](banner.png)
 
-- 個人のLINEアカウントをターミナルから直接操作
-- 友だち、グループ、トークを検索
-- 最近のメッセージ履歴を表示
-- 1行または複数行のテキストメッセージを送信
-- 最大20 MiBのファイルを送信
-- 最大20 MiBの画像・動画・音声・ファイルを指定パスまたはバイナリ標準出力にダウンロード
-- 既存のメッセージに返信
-- 標準リアクションを追加・削除
-- 自分が送ったメッセージを送信取消
-- LINEのリアルタイムイベントをNDJSON形式でストリーミング
-- シェルスクリプトや自動化処理向けにJSONを出力
-- OS標準の認証情報ストレージで保存済みセッションを保護
-- トークが対応している場合はLetter Sealingで暗号化
+<a id="install-line-cli"></a>
 
 ## LINE CLIのインストール
 
-### macOS／Linux
-
-次のコマンドで最新版をインストールできます。
-
-```sh
-curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/kongesque/line-cli/main/scripts/install-release.sh | sh
-```
-
-インストーラーがOSとCPUアーキテクチャを自動判別し、リリースのチェックサムを
-検証したうえで、`line` を `~/.local/bin` にインストールします。一般的なシェルの
-`PATH` 設定も自動で行います。案内が表示された場合は、ターミナルを開き直してください。
-
-Linuxでは、`line login` を実行する前に認証情報ストレージをインストールしてください。
-Debian／Ubuntuの場合は次のコマンドを実行します。
-
-```sh
-sudo apt install libsecret-tools gnome-keyring
-```
-
-同じD-Busセッション内でSecret Serviceキーリングが起動し、ロックが解除されている
-必要があります。
-
-> [!IMPORTANT]
-> SSH接続やヘッドレス環境のLinuxでは、パッケージをインストールするだけでは
-> 不十分です。CLIが使用するD-Busセッション内にロック解除済みのSecret Serviceが
-> ない場合、QRコードの生成やLINEのパスワード入力より前のストレージ検査でログインが
-> 停止します。ローカルでの入力後にもストレージを再検査します。その後にキーリングや
-> ファイルシステムで障害が起きた場合も、セッションを保存できないことがあります。
-
-対応するヘッドレスLinuxでは、`line login --headless` を使うと、明示的な同意後に
-systemdのユーザー単位ホスト鍵ストレージを使用できます。この方式はディスク全体の
-コピーに対する保護やTPM保護を提供しません。自動化には安定した専用の
-Unixアカウントを使用してください。既存のネイティブセッションはLINEへ
-接続せずに移行できます。
-
-```sh
-line auth migrate --storage=headless
-line auth status --check
-```
-
-アップグレード前に、実行中のCLIコマンドとwatcherを停止してください。
-新旧バージョンの同時実行には対応していません。詳しい要件、サービスの設定、
-対応するsystemdのバージョン、復旧方法は[CLIガイド](CLI.md#linux-servers-and-headless-storage)を
-参照してください。
-
-macOSではHomebrewも利用できます。
+### macOS：Homebrew
 
 ```sh
 brew install kongesque/tap/line-cli
 ```
 
-HomebrewはMacのアーキテクチャに合った公開済みのmacOS版をインストールし、
-`line` コマンドを管理します。
-この方法なら、署名されていないバイナリをブラウザからダウンロードした際に表示される
-Gatekeeperの警告を回避できます。
-
-Homebrewでインストールした場合は、次のコマンドでアップグレードします。
+### macOS／Linux：単体バイナリのインストーラー
 
 ```sh
-brew upgrade line-cli
+curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/kongesque/line-cli/main/scripts/install-release.sh | sh
 ```
 
-### Windows（PowerShell）
+インストーラーがOSとCPUアーキテクチャを判別し、リリースのチェックサムを検証して、
+`line` を `~/.local/bin` にインストールします。`PATH` 設定を反映するための案内が
+表示された場合は、ターミナルを開き直してください。
 
-PowerShellで次のコマンドを実行します。
+**Linuxデスクトップ：** ログイン前に、`line` と同じD-Busセッション内で
+Secret Serviceキーリングが起動し、ロックが解除されていることを確認してください。
+Debian／Ubuntuでは次のツールをインストールします。
+
+```sh
+sudo apt install libsecret-tools gnome-keyring
+```
+
+**Linuxサーバー／SSH：** パッケージのインストールだけでは不十分です。対応するホストでは、
+`line login --headless` でロック解除済みキーリングを必要としないホスト鍵ストレージを
+利用できます。初期設定は対話式で、このストレージはディスク全体のコピーに対する保護や
+TPM保護を提供しません。[ヘッドレス環境の設定、移行、サービス運用](CLI.md#linux-servers-and-headless-storage)を参照してください。
+
+### Windows：PowerShell
 
 ```powershell
 irm https://raw.githubusercontent.com/kongesque/line-cli/main/scripts/install-release.ps1 | iex
 ```
 
-インストーラーがCPUアーキテクチャを自動判別し、リリースのチェックサムを検証してから、
-`line.exe` をユーザープロファイル内にインストールし、ユーザーの `PATH` に追加します。
-Windowsでは標準搭載のDPAPIを使用するため、キーリング用パッケージは不要です。
-現時点ではリリース版バイナリに署名はありません。インストール直後に `line` を実行できない
-場合は、PowerShellを開き直してください。
+インストーラーがチェックサムを検証し、`line.exe` をユーザーの `PATH` に追加します。
+必要に応じてPowerShellを開き直してください。Windowsでは追加のキーリング用パッケージは不要です。
 
-### ソースからビルド
+[リリースをダウンロード](https://github.com/kongesque/line-cli/releases/latest)するか、
+[ソースからビルド](#build-and-contribute)することもできます。リリース版バイナリは
+署名・公証されていません。
 
-ビルドにはGitとGo 1.26以降が必要です。macOS／Linuxでは次のコマンドを実行します。
+インストールを確認します。
+
+```sh
+line version
+line help
+```
+
+<a id="quick-start-send-your-first-line-message"></a>
+
+## クイックスタート：最初のLINEメッセージを送信
+
+> [!IMPORTANT]
+> ログインすると、既存のLINE Chrome拡張機能や、Chrome形式を使う別のクライアントの
+> セッションが置き換えられる場合があります。保存できるアカウントはOSユーザーごとに1つです。
+
+### 1. スマートフォンのLINEでログイン
+
+```sh
+line login
+```
+
+スマートフォンのLINEのスキャナーでターミナルのQRコードを読み取り、ログインを承認します。
+PINの入力を求められた場合は、表示された番号を入力してください。
+**Session saved securely** と表示されるまで待ってください。QRログインは実験的な機能で、
+Letter Sealingが有効になっている必要があります。
+
+アカウントにメールアドレスとパスワードを設定済みの場合は、次の方法も使えます。
+
+```sh
+line login --email you@example.com
+```
+
+パスワードは画面に表示せずに入力でき、保存されません。ログイン時にはストレージを検査し、
+利用可能な保存済みセッションを置き換える前に確認します。
+[ログインのオプションとQRコードのトラブルシューティング](CLI.md#login-options-and-qr-help)も参照してください。
+
+### 2. トークを閲覧してメッセージを送信
+
+```sh
+line whoami     # ログイン中のアカウントを確認
+line chats      # トーク一覧を表示
+line messages   # トークを選んで最近のメッセージを閲覧
+line send       # 送信先を選んでメッセージを入力
+```
+
+対話式ターミナルでは、必要な情報が不足しているとCLIが入力を促します。
+Ctrl-Cでキャンセルできます。次の例のようにトーク名を直接指定することもできます。
+
+<a id="line-messaging-commands"></a>
+
+## LINEメッセージの操作コマンド
+
+| 操作 | コマンド |
+| --- | --- |
+| 友だちを検索 | `line contacts --search "Alice"` |
+| ユーザーIDで人物を検索 | `line contacts --mid USER_MID` |
+| トークやグループを検索 | `line chats --search "Family"` |
+| 最近のメッセージを閲覧 | `line messages "Alice" --limit 20` |
+| テキストメッセージを送信 | `line send "Alice" --text "Hello!"` |
+| ファイルを送信 | `line send "Alice" --file ./report.pdf` |
+| 写真、動画、音声、ファイルをダウンロード | `line download` |
+| リアクションを追加・削除 | `line react` |
+| 自分のメッセージを送信取消 | `line unsend` |
+| リアルタイムイベントを受信 | `line watch` |
+| ローカルのセッションストレージを検査 | `line auth status --check` |
+| 保存済みのローカルセッションを削除 | `line logout` |
+
+例の名前は実際の名前に置き換えてください。名前は重複のない完全一致で指定します
+（大文字・小文字は区別しません）。空白を含む名前は引用符で囲んでください。
+名前が重複する場合は、`line chats --search "Alice" --show-ids` で調べて、完全なトークIDを指定します。
+
+オプションは `line COMMAND --help` で確認できます。ダウンロード、リアクション、
+送信取消も対話式の選択に対応しています。[トークの選択ガイド](CLI.md#find-chats-and-people)も参照してください。
+
+### LINEメッセージへの返信と添付ファイルのダウンロード
+
+`--show-ids` でIDを確認し、例の `MESSAGE_ID` を置き換えます。
+
+```sh
+line messages "Alice" --show-ids
+line send "Alice" --text "Sounds good" --reply-to MESSAGE_ID
+line react "Alice" --message MESSAGE_ID --reaction love
+line download "Alice" --message MESSAGE_ID --output ./received.pdf
+```
+
+ダウンロードには添付ファイルのメッセージIDを指定し、適切なファイル名を選んでください。
+既存のファイルは上書きされません。
+[リアクション、送信取消、ダウンロードの詳細](CLI.md#download-or-change-a-message)を参照してください。
+
+<a id="automate-line-with-json-and-shell-scripts"></a>
+
+## JSONとシェルスクリプトでLINEを自動化
+
+`--json` を付けると、構造化データをstdoutに、診断メッセージをstderrに出力します。
+`--json` と `--stdin` は対話式の入力を無効にするため、必要な引数をすべて指定してください。
+名前は変更されることがあるので、スクリプトでは完全なトークIDを使います。
+
+```sh
+line chats --search "Family" --json
+line messages CHAT_ID --limit 20 --json
+line send CHAT_ID --stdin --json < message.txt
+line watch --json > events.ndjson
+```
+
+`CHAT_ID` は `line chats --json` で取得します。`--stdin` はファイルやパイプから
+複数行のテキストを読み取れます。`watch` は1行につき1件のJSON（NDJSON）を出力し、
+保存済みチェックポイントから再開します。受信側ではrevisionで重複を除去してください。
+出力したメッセージやイベントは私的なデータとして扱ってください。
+
+リモート側の状態を変更する操作は1回だけ試行され、自動では再試行されません。
+送信、アップロード、リアクション、送信取消の応答を受け取れなかった場合は、
+操作の重複を避けるため、再実行する前にLINE側の状態を確認してください。
+
+連携の詳細は[JSONフィールドと終了コード](CLI.md#json-output-and-exit-codes)と
+[リアルタイムイベントの受信](CLI.md#watch-new-events)を参照してください。
+
+## Letter Sealingによる暗号化とセッションのセキュリティ
+
+- **暗号化：** 対応する場合はLetter Sealingを使用します。鍵の不足、形式の不正、
+  通信障害によって、暗号化した送信が通知なく平文に切り替わることはありません。
+  JSONの送信結果で暗号化の状態を確認できます。
+- **ストレージ：** macOSはキーチェーン、Linuxは鍵をSecret Serviceに保存する
+  AES-GCMセッションファイル、Windowsは現在のユーザー用DPAPIを使用します。
+  ヘッドレスLinuxはホスト鍵ストレージを使用します。
+- **セッションの復旧：** 保存済みの更新用認証情報が有効なら、再起動後もアクセストークンが
+  自動更新されます。更新でアクセスを復旧できない場合や、LINEがセッションを無効化した場合は、
+  再度ログインしてください。
+
+[セッションの保存先](CLI.md#where-your-session-is-stored) ·
+[トークンの更新と復旧](CLI.md#token-refresh)
+
+## 制限事項
+
+- 閲覧できるのは最近の履歴のみで、1回につき最大100件です。閲覧しても既読にはなりません。
+  古い暗号化メッセージの一部は閲覧できない場合があります。
+- ファイル送信とメディアのダウンロードは最大20 MiBです。`--file` で送信した画像・動画・音声は
+  通常のファイルとして表示されます。スタンプやメディア専用メッセージの送信、
+  外部メディアURLからのダウンロードには対応していません。
+- LINE CLIはLINEのChrome形式のプロトコルを使用します。サーバー側の変更によって
+  互換性に影響が出る場合があり、一部の処理にはより幅広い実環境での検証が必要です。
+
+## LINE CLIの更新
+
+アップグレード前に実行中のコマンドとイベント監視プロセスを停止してください。
+新旧バージョンの同時実行には対応していません。
+
+```sh
+line update --check   # インストールせずに最新版を確認
+line update           # 対応する場合は更新し、それ以外は手順を表示
+```
+
+macOSとLinuxで公式インストーラーから導入した単体バイナリは、その場で更新できます。
+Homebrewの場合は `brew upgrade line-cli` を使用します。その他のインストール方法では
+更新手順が表示されます。確認にLINEへのログインは不要で、コマンドを実行したときだけ
+確認します。[更新の詳細](CLI.md#updating-line-cli)を参照してください。
+
+## ドキュメントとサポート
+
+- [CLIガイド](CLI.md)：全コマンドの使い方、トラブルシューティング、サーバー設定。
+- [トークンとセッションの監査](TOKEN_SESSION.md)：更新と復旧の実装詳細。
+- [GitHub Issues](https://github.com/kongesque/line-cli/issues)：不具合報告と機能リクエスト。
+
+不具合の報告には `line version`、OS、実行したコマンド、機密情報を除いたエラーを添えてください。
+パスワード、トークン、QRログインの値、私的なメッセージは含めないでください。
+
+<a id="build-and-contribute"></a>
+
+## ビルドと開発への参加
+
+ソースからのビルドにはGitと **Go 1.26+** が必要です。macOSではキーチェーンを
+利用するためにXcode Command Line ToolsとCGOも必要です。macOS／Linuxでは次を実行します。
 
 ```sh
 git clone https://github.com/kongesque/line-cli.git
 cd line-cli
 ./install.sh
-line help
 ```
 
-Windowsでは、[PowerShell用のビルド手順](CLI.md#build-from-source)を参照してください。
-`install.sh` の実行にはPOSIXシェルが必要なため、PowerShell上では直接動作しません。
-
-ソースからビルドした場合も、Linuxでは前述のキーリング環境が必要です。
-Windows PowerShellでの手順やコントリビューター向けのチェック項目については、
+インストーラーが表示するPATHの案内に従ってください。Windows PowerShellの手順は
 [ソースビルドガイド](CLI.md#build-from-source)を参照してください。
+ソースからビルドする場合も、Linuxのストレージ要件が適用されます。
 
-### LINE CLIを最新版に保つ
-
-```sh
-line update --check   # 現在のバージョン、最新版、次の操作を確認
-line update           # 対応する場合は更新し、それ以外は手順を表示
-```
-
-macOSとLinuxで公式インストーラーから導入した単体の実行ファイルは、
-その場で更新できます。Homebrew、Windows、ソースビルド、認識できない
-インストール方法では、それぞれに合った更新手順が表示されます。
-更新前に実行中のCLIコマンドとwatcherを停止してください。
-更新の確認にLINEへのログインは不要で、明示的にコマンドを実行したときだけ
-確認します。詳細とJSON出力については[LINE CLIの更新](CLI.md#updating-line-cli)を
-参照してください。
-
-## ターミナルからLINEを使う
-
-`line login` は対話式のQRログインを選択します。スマートフォンのLINEで
-ターミナルのQRコードを読み取ります。`line login --email ADDRESS` では、
-従来のメールアドレスとパスワードによるログインを利用できます。
-
-詳しくは[ログインのオプションと制限](CLI.md#login-options-and-qr-help)をご覧ください。
-
-```sh
-line login
-line whoami
-line chats
-line messages "Family group" --limit 10
-line send "Alice" --text "Hello!"
-```
-
-どちらの方式もストレージを検査し、利用可能な保存済みセッションを置き換える前に
-確認します。`--force` が省略するのはこの確認だけです。進捗、QRコード、PINは
-stderrに、成功メッセージはstdoutに出力されます。幅の狭いターミナルや
-アクセシビリティ上の代替手段として、`line login --qr-url` で機密性のある
-一時的な値を表示し、信頼できるローカルツールでQRコードに変換できます。
-共有、保存、オンライン生成サービスへの送信は避けてください。
-SSHや `--headless` でも対話式ターミナルが必要です。ヘッドレスLinuxでは、
-メールログインに `line login --headless --email you@example.com`、
-QRログインに `line login --headless` を利用できます。
-
-名前を引数で指定する場合は、重複のない完全一致でなければなりません。
-対象を指定せずにコマンドを実行すると、トークを対話形式で選択できます。
-
-```sh
-line messages
-line send
-line react
-line unsend
-```
-
-そのほか、よく使う操作は次のとおりです。
-
-```sh
-line send "Alice" --file ./report.pdf
-line send "Alice" --text "Sounds good" --reply-to MESSAGE_ID
-line react "Alice" --message MESSAGE_ID --reaction love
-line download "Alice" --message MESSAGE_ID --output ./received.pdf
-line download "Alice" --message IMAGE_MESSAGE_ID --output ./photo.jpg
-```
-
-オプションや使用例を確認するには、`line COMMAND --help` を実行してください。
-
-## JSONと自動化
-
-```sh
-line chats --search "Family" --json
-line messages "Alice" --limit 20 --json
-line send "Alice" --stdin < message.txt
-line watch --json > events.ndjson
-```
-
-JSONデータは標準出力、診断メッセージは標準エラー出力に書き出されます。
-エクスポートしたメッセージやイベントは、私的な会話データとして取り扱ってください。
-
-リモート側の状態を変更する操作は1回だけ実行され、自動で再試行されることはありません。
-送信やアップロード後に応答を受け取れなかった場合は、重複を防ぐため、再実行する前に
-LINE側の状態を確認してください。
-
-## セキュリティとプライバシー
-
-アカウントとトークが対応している場合、LINE CLIはLetter Sealingを使用します。
-鍵が見つからない場合、鍵の形式が不正な場合、ネットワーク障害が発生した場合でも、
-暗号化した送信が通知なく平文へ切り替わることはありません。
-送信結果には暗号化の有無が表示されます。
-
-パスワードが保存されることはありません。セッションはOSの機能で保護されます。
-
-| プラットフォーム | 認証情報の保存先 |
-| --- | --- |
-| macOS | キーチェーン |
-| Linux | 暗号化用の鍵をSecret Serviceで保護するAES-GCMセッションファイル |
-| Windows | 現在のユーザー用DPAPI |
-
-LINE CLIは、LINEのChrome形式のプロトコルをもとに実装されています。
-サーバー側の変更によって互換性に影響が出る場合があります。
-
-## 現在の制限事項
-
-- 保存できるアカウントはOSユーザーごとに1つ
-- Letter Sealingが無効なアカウントのQRログインには未対応です。
-- 通常、約168時間（7日）のアクセストークン更新はV3の自動更新で処理され、CLIを再起動した後も自動で更新されます。リフレッシュトークンでアクセスを復旧できない場合、またはLINEが明示的にセッションを無効化した場合にのみ、手動でのログインが必要です。詳しくは[トークン更新とセッションの無効化](CLI.md#token-refresh)と[ヘッドレスサービスの運用](CLI.md#run-a-watcher-without-a-login-session)を参照してください。
-- 閲覧できるのは最近の履歴のみで、1回につき最大100件
-- 送信は一般的なファイルのみ（スタンプやメディア専用メッセージの送信には未対応）
-- メディアのダウンロードは最大20 MiB。外部メディアURLには未対応
-- メッセージを表示しても既読にはならない
-- より幅広い実環境での検証が必要なプロトコル処理が一部残っている
-
-## ドキュメント
-
-- [CLIの全コマンドリファレンスとトラブルシューティング](CLI.md)
-
-## 開発
+ローカルで開発する場合：
 
 ```sh
 ./build.sh
+./bin/line help
 go test -race ./internal/... ./cmd/line ./pkg/line/... ./pkg/e2ee
 go vet ./internal/... ./cmd/line ./pkg/line ./pkg/e2ee ./pkg
 ```
 
-CIはLinux、macOS、Windowsで実行され、OS標準の認証情報ストレージに関する
-チェックも含まれます。
+全チェック項目とプロトコルの要件は[コントリビューター向けガイド](AGENTS.md)を参照してください。
+CIは3つのプラットフォームとOS標準の認証情報ストレージを検査します。
+テストには合成データと偽のAPIを使い、実際のLINEを使うテストには明示的な許可が必要です。
 
 ## ライセンスと由来
 
-LINE CLIはLINEの公式製品ではなく、LINEとの提携や承認を受けたものでもありません。
-[beeper/line](https://github.com/beeper/line)をもとに開発されており、共有している
-プロトコルおよび暗号化コードには、アップストリームの著作権表示と由来を保持しています。
+LINE CLIはLINEと提携しておらず、LINEの承認を受けたものでもありません。
+[beeper/line](https://github.com/beeper/line)をもとに開発されており、共有するプロトコルと
+暗号化コードには、アップストリームの著作権表示と由来を保持しています。
 MatrixコネクターとBeeperのデプロイ環境は、このプロジェクトには含まれません。
 
 [MIT License](LICENSE)のもとで配布されています。

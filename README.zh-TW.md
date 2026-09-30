@@ -1,252 +1,257 @@
-# LINE CLI：在終端機使用個人 LINE 帳號
+# LINE CLI：個人 LINE 帳號的指令列用戶端
 
-繁體中文（台灣） | [ภาษาไทย](README.th.md) | [日本語](README.ja.md) | [English](README.md)
+**LINE CLI** 是以 Go 撰寫的非官方開源 LINE 指令列用戶端。
+你可以在終端機傳送 LINE 訊息、讀取個人與群組聊天室、分享檔案、下載附件，
+並串流接收即時事件。日常傳訊可使用互動式提示，也能透過 JSON 輸出串接
+shell 指令稿與 AI 代理程式工作流程。
 
-**LINE CLI** 是一套非官方的個人 LINE 帳號指令列用戶端。你可以直接在
-終端機讀取與傳送訊息、分享檔案、回覆、加入表情回應、收回訊息、監看
-即時事件，也能透過 JSON 串接指令稿與 AI 代理程式工作流程。
-
-LINE CLI 與使用 LINE Messaging API 的工具不同；它使用的是你的個人
-LINE 帳號，不是機器人帳號。
-
-![使用 LINE CLI 在終端機操作個人 LINE 帳號](banner.png)
+支援 **macOS、Linux 與 Windows**，並在聊天室支援時使用 Letter Sealing
+端對端加密。使用你的個人 LINE 帳號登入即可，不需要機器人帳號或設定
+LINE Messaging API。
 
 [![CI](https://github.com/kongesque/line-cli/actions/workflows/cli.yml/badge.svg)](https://github.com/kongesque/line-cli/actions/workflows/cli.yml)
 [![Release](https://img.shields.io/github/v/release/kongesque/line-cli?filter=v*&label=release)](https://github.com/kongesque/line-cli/releases/latest)
 [![Go](https://img.shields.io/github/go-mod/go-version/kongesque/line-cli)](go.mod)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-LINE CLI 支援 macOS、Linux 與 Windows，並提供 Letter Sealing 端對端加密
-及作業系統原生的認證資料儲存機制。
+[安裝](#install-line-cli) · [快速上手](#quick-start-send-your-first-line-message) · [指令](#line-messaging-commands) · [自動化](#automate-line-with-json-and-shell-scripts) · [完整指南](CLI.md)
 
-> [!IMPORTANT]
-> LINE 一次只允許一個 Chrome 類型的工作階段。使用 `line` 登入時，可能會
-> 取代現有的 LINE Chrome 擴充功能或其他 Chrome 類型用戶端工作階段。
-> CLI 會為每位作業系統使用者儲存一個帳號。
+[English](README.md) | 繁體中文（台灣） | [ภาษาไทย](README.th.md) | [日本語](README.ja.md)
 
-## 功能
+![LINE CLI：在終端機傳送個人 LINE 訊息、分享檔案與自動化](banner.png)
 
-- 直接在終端機使用個人 LINE 帳號
-- 尋找聯絡人、群組與聊天室
-- 讀取近期訊息記錄
-- 傳送單行或多行文字訊息
-- 傳送最大 20 MiB 的一般檔案
-- 下載最大 20 MiB 的圖片、影片、音訊與檔案，儲存至指定路徑或輸出至標準輸出
-- 回覆既有訊息
-- 新增或移除標準表情回應
-- 收回自己傳送的訊息
-- 以 NDJSON 串流接收即時 LINE 事件
-- 輸出 JSON，供 shell 指令稿與自動化流程使用
-- 使用作業系統原生的認證資料儲存機制保護已儲存的工作階段
-- 若聊天室支援，則使用 Letter Sealing 加密
+<a id="install-line-cli"></a>
 
 ## 安裝 LINE CLI
 
-### macOS 與 Linux
-
-使用一行指令安裝最新版本：
-
-```sh
-curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/kongesque/line-cli/main/scripts/install-release.sh | sh
-```
-
-安裝程式會自動偵測作業系統與 CPU 架構、驗證發行檔的檢查碼、將 `line` 安裝到
-`~/.local/bin`，並為常見 shell 設定 `PATH`。如果安裝程式提示，請重新開啟終端機。
-
-在 Linux 執行 `line login` 前，請先安裝認證資料儲存工具。Debian／Ubuntu 可執行：
-
-```sh
-sudo apt install libsecret-tools gnome-keyring
-```
-
-Secret Service 金鑰圈必須在同一個 D-Bus 工作階段中執行並保持解鎖。
-
-> [!IMPORTANT]
-> 透過 SSH 或無頭環境使用 Linux 時，只安裝套件還不夠。如果 CLI 所在的
-> D-Bus 工作階段沒有已解鎖的 Secret Service，登入流程會在產生 QR 碼或
-> 要求 LINE 密碼前的儲存空間檢查階段停止。本機輸入完成後也會再次檢查；
-> 若金鑰圈或檔案系統之後發生問題，仍可能無法儲存工作階段。
-
-在支援的無頭 Linux 系統上，可使用 `line login --headless`。明確同意限制後，
-CLI 會改用 systemd 使用者範圍的主機金鑰儲存機制。此方式無法防止整顆磁碟遭
-複製，也不具備 TPM 保護。自動化作業請使用穩定的專用 Unix 帳號。
-既有的原生工作階段可在不連線至 LINE 的情況下移轉：
-
-```sh
-line auth migrate --storage=headless
-line auth status --check
-```
-
-升級前請先停止正在執行的 CLI 指令與 watcher；不支援新舊版本同時執行。
-完整需求、服務設定、支援的 systemd 版本與復原方式請參閱
-[CLI 指南](CLI.md#linux-servers-and-headless-storage)。
-
-macOS 也可以使用 Homebrew：
+### macOS：Homebrew
 
 ```sh
 brew install kongesque/tap/line-cli
 ```
 
-Homebrew 會依 Mac 的架構安裝已發布的 macOS 發行檔，並管理 `line` 指令。這種安裝方式
-可避免從瀏覽器下載未簽署檔案時出現的 Gatekeeper 警告。
-
-若使用 Homebrew 安裝，可用以下指令升級：
+### macOS 與 Linux：獨立執行檔安裝程式
 
 ```sh
-brew upgrade line-cli
+curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/kongesque/line-cli/main/scripts/install-release.sh | sh
 ```
 
-### Windows（PowerShell）
+安裝程式會偵測作業系統與 CPU 架構、驗證發行檔的檢查碼，並將 `line`
+安裝至 `~/.local/bin`。若提示需要套用 `PATH` 設定，請重新開啟終端機。
 
-請在 PowerShell 執行：
+**Linux 桌面：** 登入前，請確認 Secret Service 金鑰圈已啟動並解鎖，
+且與 `line` 位於同一個 D-Bus 工作階段。Debian／Ubuntu 可安裝以下工具：
+
+```sh
+sudo apt install libsecret-tools gnome-keyring
+```
+
+**Linux 伺服器或 SSH：** 只安裝套件還不夠。在支援的主機上，
+`line login --headless` 可使用主機金鑰儲存，不需要已解鎖的金鑰圈。
+首次設定仍需互動式操作；此儲存方式無法防止整顆磁碟遭複製，也不提供 TPM 保護。
+詳見[無頭環境設定、移轉與服務部署](CLI.md#linux-servers-and-headless-storage)。
+
+### Windows：PowerShell
 
 ```powershell
 irm https://raw.githubusercontent.com/kongesque/line-cli/main/scripts/install-release.ps1 | iex
 ```
 
-安裝程式會自動偵測 CPU 架構、驗證發行檔的檢查碼、將 `line.exe` 安裝到使用者
-設定檔，並加入使用者的 `PATH`。
-Windows 使用內建的 DPAPI，因此不需要額外安裝金鑰圈套件。目前發布的
-執行檔尚未經過數位簽署。如果無法立即執行 `line`，請重新開啟 PowerShell。
+安裝程式會驗證檢查碼，並將 `line.exe` 加入使用者的 `PATH`。
+必要時請重新開啟 PowerShell。Windows 不需要額外安裝金鑰圈套件。
 
-### 從原始碼建置
+你也可以[下載發行檔](https://github.com/kongesque/line-cli/releases/latest)
+或[從原始碼建置](#build-and-contribute)。發行檔尚未經過數位簽署或公證。
 
-建置前須先安裝 Git 與 Go 1.26 或更新版本。在 macOS／Linux 上執行：
+確認安裝結果：
+
+```sh
+line version
+line help
+```
+
+<a id="quick-start-send-your-first-line-message"></a>
+
+## 快速上手：傳送第一則 LINE 訊息
+
+> [!IMPORTANT]
+> 登入可能會取代現有的 LINE Chrome 擴充功能或其他 Chrome 類型用戶端工作階段。
+> LINE CLI 會為每位作業系統使用者儲存一個帳號。
+
+### 1. 使用手機上的 LINE 登入
+
+```sh
+line login
+```
+
+使用手機 LINE 的掃描器掃描終端機上的 QR 碼、核准登入，並依提示輸入顯示的 PIN。
+請等到出現 **Session saved securely**。QR 碼登入目前為實驗性功能，
+且必須啟用 Letter Sealing。
+
+如果你的帳號已設定電子郵件與密碼，也可以使用：
+
+```sh
+line login --email you@example.com
+```
+
+輸入密碼時不會顯示內容，也不會儲存密碼。登入會檢查儲存機制，並在取代可用的
+已儲存工作階段前詢問。
+詳見[登入選項與 QR 碼疑難排解](CLI.md#login-options-and-qr-help)。
+
+### 2. 瀏覽聊天室並傳送訊息
+
+```sh
+line whoami     # 確認目前帳號
+line chats      # 列出聊天室
+line messages   # 選擇聊天室並讀取近期訊息
+line send       # 選擇收件人並輸入訊息
+```
+
+在互動式終端機中，CLI 會提示你補齊所需資料。按 Ctrl-C 可取消，
+也能像以下範例一樣直接指定聊天室名稱。
+
+<a id="line-messaging-commands"></a>
+
+## LINE 訊息操作指令
+
+| 想做什麼 | 指令 |
+| --- | --- |
+| 尋找好友 | `line contacts --search "Alice"` |
+| 以使用者 ID 查詢個人資料 | `line contacts --mid USER_MID` |
+| 尋找聊天室與群組 | `line chats --search "Family"` |
+| 讀取近期訊息 | `line messages "Alice" --limit 20` |
+| 傳送文字訊息 | `line send "Alice" --text "Hello!"` |
+| 傳送檔案 | `line send "Alice" --file ./report.pdf` |
+| 下載照片、影片、音訊或檔案 | `line download` |
+| 新增或移除表情回應 | `line react` |
+| 收回自己傳送的訊息 | `line unsend` |
+| 串流接收即時事件 | `line watch` |
+| 檢查本機工作階段儲存機制 | `line auth status --check` |
+| 移除本機已儲存的工作階段 | `line logout` |
+
+請將範例名稱換成自己的聯絡人或聊天室名稱。名稱必須唯一且完全相符
+（不區分大小寫）；含空格的名稱請加上引號。若名稱重複，可使用
+`line chats --search "Alice" --show-ids` 查詢，再指定完整的聊天室 ID。
+
+使用 `line COMMAND --help` 查看選項。下載、表情回應與收回訊息也支援互動式選擇。
+詳見[聊天室選擇指南](CLI.md#find-chats-and-people)。
+
+### 回覆 LINE 訊息與下載附件
+
+使用 `--show-ids` 找出 ID，再替換範例中的 `MESSAGE_ID`：
+
+```sh
+line messages "Alice" --show-ids
+line send "Alice" --text "Sounds good" --reply-to MESSAGE_ID
+line react "Alice" --message MESSAGE_ID --reaction love
+line download "Alice" --message MESSAGE_ID --output ./received.pdf
+```
+
+下載時，請選擇附件訊息的 ID，並指定合適的檔名。既有檔案不會被覆寫。
+詳見[更多表情回應、收回訊息與下載選項](CLI.md#download-or-change-a-message)。
+
+<a id="automate-line-with-json-and-shell-scripts"></a>
+
+## 使用 JSON 與 shell 指令稿自動化 LINE
+
+加入 `--json` 可將結構化資料輸出至 stdout；診斷訊息則輸出至 stderr。
+`--json` 與 `--stdin` 會停用互動式提示，請提供所有必要參數。
+名稱可能變動，因此指令稿應使用完整的聊天室 ID。
+
+```sh
+line chats --search "Family" --json
+line messages CHAT_ID --limit 20 --json
+line send CHAT_ID --stdin --json < message.txt
+line watch --json > events.ndjson
+```
+
+從 `line chats --json` 取得 `CHAT_ID`。`--stdin` 可從檔案或管線讀取多行文字。
+`watch` 會輸出每行一筆 JSON 的 NDJSON，並從已儲存的檢查點繼續；
+接收端應依 revision 去除重複事件。請將匯出的訊息與事件視為私人資料。
+
+會變更遠端資料的操作只會嘗試一次，不會自動重試。如果傳送訊息、上傳、
+表情回應或收回訊息後未收到回應，請先在 LINE 中確認結果，再決定是否重做，
+以免重複操作。
+
+串接細節請參閱 [JSON 欄位與結束代碼](CLI.md#json-output-and-exit-codes)
+及[即時事件串流](CLI.md#watch-new-events)。
+
+## Letter Sealing 加密與工作階段安全性
+
+- **加密：** 支援時會使用 Letter Sealing。金鑰缺少、格式錯誤或傳輸失敗時，
+  原應加密的訊息不會在未告知的情況下改以明文傳送。JSON 傳送結果會顯示加密狀態。
+- **儲存：** macOS 使用 Keychain；Linux 使用 AES-GCM 加密的工作階段檔案，
+  金鑰存放於 Secret Service；Windows 使用目前使用者的 DPAPI。
+  無頭 Linux 使用主機金鑰儲存。
+- **工作階段復原：** 已儲存的更新憑證有效時，存取權杖會自動更新，重新啟動後也適用。
+  若更新無法恢復存取，或 LINE 使工作階段失效，請重新登入。
+
+[工作階段儲存](CLI.md#where-your-session-is-stored) ·
+[權杖更新與復原](CLI.md#token-refresh)
+
+## 使用限制
+
+- 僅能讀取近期訊息，每次最多 100 則。讀取不會將訊息標為已讀；
+  部分較舊的加密訊息可能無法讀取。
+- 檔案傳送與媒體下載上限為 20 MiB。以 `--file` 傳送的圖片、影片與音訊
+  會顯示為一般檔案；不支援貼圖或專用媒體訊息傳送，也無法下載外部媒體 URL。
+- LINE CLI 使用 LINE 的 Chrome 類型協定。伺服器變更可能影響相容性，
+  部分協定流程仍需要更廣泛的實際環境驗證。
+
+## 更新 LINE CLI
+
+升級前，請先停止正在執行的指令與事件監看程序；不支援新舊版本同時執行。
+
+```sh
+line update --check   # 檢查最新版本，不進行安裝
+line update           # 支援時更新，否則顯示升級指引
+```
+
+macOS 與 Linux 的官方獨立執行檔安裝可直接更新。Homebrew 請使用
+`brew upgrade line-cli`；其他安裝方式會收到升級指引。檢查更新不需要登入 LINE，
+且只在你執行指令時進行。詳見[更新說明](CLI.md#updating-line-cli)。
+
+## 文件與協助
+
+- [CLI 指南](CLI.md)：完整用法、疑難排解與伺服器設定。
+- [權杖與工作階段稽核](TOKEN_SESSION.md)：更新與復原的實作細節。
+- [GitHub Issues](https://github.com/kongesque/line-cli/issues)：回報錯誤或提出功能需求。
+
+回報錯誤時，請附上 `line version`、作業系統、指令及已遮蔽敏感內容的錯誤訊息。
+請勿提供密碼、權杖、QR 碼登入值或私人訊息。
+
+<a id="build-and-contribute"></a>
+
+## 建置與參與開發
+
+從原始碼建置需要 Git 與 **Go 1.26+**。macOS 另需 Xcode Command Line Tools
+及 CGO，以支援 Keychain。在 macOS 或 Linux 上執行：
 
 ```sh
 git clone https://github.com/kongesque/line-cli.git
 cd line-cli
 ./install.sh
-line help
 ```
 
-Windows 請使用 [PowerShell 建置指令](CLI.md#build-from-source)。
-`install.sh` 需要 POSIX shell，無法直接在 PowerShell 中執行。
+請依安裝程式提示設定 PATH。Windows PowerShell 指令請參閱
+[原始碼建置指南](CLI.md#build-from-source)。Linux 的儲存需求同樣適用於原始碼建置。
 
-從原始碼建置時，仍須符合上述 Linux 金鑰圈需求。Windows PowerShell
-指令與貢獻者檢查方式請參閱[原始碼建置指南](CLI.md#build-from-source)。
-
-### 保持 LINE CLI 為最新版本
-
-```sh
-line update --check   # 查看目前版本、最新版本及後續操作
-line update           # 支援時直接安裝，否則顯示升級指引
-```
-
-在 macOS 與 Linux 上，透過官方安裝程式安裝的獨立執行檔可直接更新。
-Homebrew、Windows、原始碼建置及無法辨識的安裝方式，則會顯示對應的
-升級指引。更新前請先停止正在執行的 CLI 指令與 watcher。
-檢查更新不需要登入 LINE，而且只會在你執行指令時進行。
-詳細行為與 JSON 輸出請參閱[更新 LINE CLI](CLI.md#updating-line-cli)。
-
-## 在終端機使用 LINE
-
-`line login` 預設使用互動式 QR 碼登入，請用手機上的 LINE 掃描終端機顯示的
-QR 碼。`line login --email ADDRESS` 則保留電子郵件與密碼登入方式。
-
-詳見[登入選項與限制](CLI.md#login-options-and-qr-help)。
-
-```sh
-line login
-line whoami
-line chats
-line messages "Family group" --limit 10
-line send "Alice" --text "Hello!"
-```
-
-兩種登入方式都會先檢查儲存空間，並在取代可用的本機工作階段前詢問。
-`--force` 只略過這個確認，不會略過其他檢查。進度、QR 碼與 PIN 輸出至 stderr，
-成功訊息輸出至 stdout。終端機過窄或需要無障礙替代方式時，可用
-`line login --qr-url` 顯示一次性敏感資料，再交由可信任的本機工具產生 QR 碼；
-不要分享、儲存或上傳至線上產生器。SSH 與 `--headless` 登入仍需互動式終端機。
-在無頭 Linux 上，可使用 `line login --headless --email you@example.com`
-進行電子郵件登入，或使用 `line login --headless` 進行 QR 登入。
-
-以參數指定名稱時，名稱必須完全相符，且不得與其他名稱重複。若要透過
-互動介面選擇聊天室，執行指令時不要提供目標：
-
-```sh
-line messages
-line send
-line react
-line unsend
-```
-
-其他常用操作：
-
-```sh
-line send "Alice" --file ./report.pdf
-line send "Alice" --text "Sounds good" --reply-to MESSAGE_ID
-line react "Alice" --message MESSAGE_ID --reaction love
-line download "Alice" --message MESSAGE_ID --output ./received.pdf
-line download "Alice" --message IMAGE_MESSAGE_ID --output ./photo.jpg
-```
-
-使用 `line COMMAND --help` 查看各指令的選項與範例。
-
-## JSON 與自動化
-
-```sh
-line chats --search "Family" --json
-line messages "Alice" --limit 20 --json
-line send "Alice" --stdin < message.txt
-line watch --json > events.ndjson
-```
-
-JSON 資料會輸出至 stdout，診斷訊息則輸出至 stderr。匯出的訊息與事件
-屬於私人對話資料，請妥善保管。
-
-會變更遠端資料的操作只會嘗試一次，且不會自動重試。如果傳送訊息或上傳
-檔案後沒有收到回應，請先在 LINE 中確認結果，再決定是否重試，以免產生
-重複內容。
-
-## 安全性與隱私權
-
-若帳號與聊天室皆支援，LINE CLI 會使用 Letter Sealing。若缺少金鑰、格式
-錯誤或網路傳輸失敗，原應加密的訊息不會在未告知的情況下改用明文傳送。
-傳送結果會顯示是否使用加密。
-
-你的密碼不會被儲存。工作階段由作業系統提供保護：
-
-| 平台 | 認證資料儲存方式 |
-| --- | --- |
-| macOS | Keychain（鑰匙圈） |
-| Linux | AES-GCM 加密的工作階段檔案；包裝金鑰存放於 Secret Service |
-| Windows | 目前使用者的 DPAPI |
-
-LINE CLI 採用 LINE Chrome 類型的通訊協定。伺服器端的變更可能影響相容性。
-
-## 目前限制
-
-- 每位作業系統使用者只能儲存一個帳號
-- QR 登入不支援已關閉 Letter Sealing 的帳號。
-- 一般約 168 小時（7 天）的存取權杖更新週期，會由 V3 自動更新機制處理，CLI 重新啟動後也適用。只有在無法透過更新權杖恢復存取，或 LINE 明確使工作階段失效時，才需要手動登入。詳見[權杖更新與工作階段失效](CLI.md#token-refresh)與[無頭服務部署](CLI.md#run-a-watcher-without-a-login-session)。
-- 只能讀取近期記錄，每次最多 100 則訊息
-- 傳送僅支援一般檔案，不支援貼圖或特殊媒體訊息傳送
-- 媒體下載上限為 20 MiB，不支援外部媒體網址
-- 讀取訊息不會將訊息標示為已讀
-- 部分通訊協定流程仍需更廣泛的實際環境驗證
-
-## 文件
-
-- [完整 CLI 指令參考與疑難排解](CLI.md)
-
-## 開發
+本機開發：
 
 ```sh
 ./build.sh
+./bin/line help
 go test -race ./internal/... ./cmd/line ./pkg/line/... ./pkg/e2ee
 go vet ./internal/... ./cmd/line ./pkg/line ./pkg/e2ee ./pkg
 ```
 
-CI 會在 Linux、macOS 與 Windows 上執行，並包含各平台原生認證資料儲存
-機制的檢查。
+完整檢查與協定要求請參閱[貢獻者指南](AGENTS.md)。CI 涵蓋三種平台與原生認證資料儲存。
+測試使用合成資料與模擬 API；實際 LINE 測試需要明確授權。
 
 ## 授權與來源
 
-LINE CLI 並非 LINE 官方產品，亦未獲得 LINE 認可。本專案衍生自
-[beeper/line](https://github.com/beeper/line)；共用的通訊協定與密碼學程式碼
-保留上游的著作權聲明及來源資訊。本專案不包含 Matrix connector 與 Beeper
-部署環境。
+LINE CLI 與 LINE 無關，也未獲 LINE 背書。本專案衍生自
+[beeper/line](https://github.com/beeper/line)；共用的協定與加密程式碼保留
+上游著作權聲明與來源資訊。Matrix 連接器與 Beeper 部署環境不包含在本專案中。
 
-本專案採用 [MIT 授權條款](LICENSE)。
+以 [MIT 授權條款](LICENSE)發布。
