@@ -1,5 +1,7 @@
 # LINE CLI：個人 LINE 帳號的指令列用戶端
 
+[English](README.md) | 繁體中文（台灣）  | [日本語](README.ja.md) | [ภาษาไทย](README.th.md)
+
 **LINE CLI** 是以 Go 撰寫的非官方開源 LINE 指令列用戶端。
 你可以在終端機傳送 LINE 訊息、讀取個人與群組聊天室、分享檔案、下載附件，
 並串流接收即時事件。日常傳訊可使用互動式提示，也能透過 JSON 輸出串接
@@ -15,8 +17,6 @@ LINE Messaging API。
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 [安裝](#install-line-cli) · [快速上手](#quick-start-send-your-first-line-message) · [指令](#line-messaging-commands) · [自動化](#automate-line-with-json-and-shell-scripts) · [完整指南](CLI.md)
-
-[English](README.md) | 繁體中文（台灣） | [ภาษาไทย](README.th.md) | [日本語](README.ja.md)
 
 ![LINE CLI：在終端機傳送個人 LINE 訊息、分享檔案與自動化](banner.png)
 

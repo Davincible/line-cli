@@ -1,5 +1,7 @@
 # LINE CLI: ไคลเอนต์บรรทัดคำสั่งสำหรับบัญชี LINE ส่วนตัว
 
+[English](README.md) | [繁體中文（台灣）](README.zh-TW.md) | [日本語](README.ja.md) | ภาษาไทย
+
 **LINE CLI** คือไคลเอนต์บรรทัดคำสั่งของ LINE แบบโอเพนซอร์สที่ไม่เป็นทางการ เขียนด้วย Go
 ใช้ส่งข้อความ LINE จากเทอร์มินัล อ่านแชทส่วนตัวและแชทกลุ่ม แชร์ไฟล์ ดาวน์โหลดไฟล์แนบ
 และรับเหตุการณ์แบบเรียลไทม์ได้ ใช้คำแนะนำแบบโต้ตอบสำหรับการส่งข้อความในชีวิตประจำวัน
@@ -15,8 +17,6 @@ Letter Sealing เมื่อห้องแชทรองรับ ลงช�
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 [ติดตั้ง](#install-line-cli) · [เริ่มใช้งาน](#quick-start-send-your-first-line-message) · [คำสั่ง](#line-messaging-commands) · [ระบบอัตโนมัติ](#automate-line-with-json-and-shell-scripts) · [คู่มือฉบับเต็ม](CLI.md)
-
-[English](README.md) | [繁體中文（台灣）](README.zh-TW.md) | ภาษาไทย | [日本語](README.ja.md)
 
 ![LINE CLI: ส่งข้อความ LINE ส่วนตัว แชร์ไฟล์ และทำงานอัตโนมัติผ่านเทอร์มินัล](banner.png)
 

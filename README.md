@@ -1,5 +1,7 @@
 # LINE CLI: command-line client for personal LINE accounts
 
+English | [繁體中文（台灣）](README.zh-TW.md) | [日本語](README.ja.md) | [ภาษาไทย](README.th.md)
+
 **LINE CLI** is an unofficial, open-source LINE command-line client written in Go.
 Send LINE messages from your terminal, read personal and group chats, share files,
 download attachments, and stream live events. Use interactive prompts for everyday
@@ -15,8 +17,6 @@ no bot account or LINE Messaging API setup is required.
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 [Install](#install-line-cli) · [Quick start](#quick-start-send-your-first-line-message) · [Commands](#line-messaging-commands) · [Automation](#automate-line-with-json-and-shell-scripts) · [Full guide](CLI.md)
-
-English | [繁體中文（台灣）](README.zh-TW.md) | [ภาษาไทย](README.th.md) | [日本語](README.ja.md)
 
 ![LINE CLI: personal LINE messages, files, and automation from the terminal](banner.png)
 

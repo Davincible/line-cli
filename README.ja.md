@@ -1,5 +1,7 @@
 # LINE CLI：個人のLINEアカウント向けコマンドラインクライアント
 
+[English](README.md) | [繁體中文（台灣）](README.zh-TW.md) | 日本語 | [ภาษาไทย](README.th.md)
+
 **LINE CLI** は、Goで書かれた非公式のオープンソースLINEコマンドラインクライアントです。
 ターミナルからLINEメッセージを送信し、個人やグループのトークを閲覧したり、
 ファイルを共有したり、添付ファイルをダウンロードしたり、リアルタイムイベントを
@@ -16,8 +18,6 @@ AIエージェントのワークフローにはJSON出力を利用できます�
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 [インストール](#install-line-cli) · [クイックスタート](#quick-start-send-your-first-line-message) · [コマンド](#line-messaging-commands) · [自動化](#automate-line-with-json-and-shell-scripts) · [詳しいガイド](CLI.md)
-
-[English](README.md) | [繁體中文（台灣）](README.zh-TW.md) | [ภาษาไทย](README.th.md) | 日本語
 
 ![LINE CLI：ターミナルから個人のLINEでメッセージ送信、ファイル共有、自動化](banner.png)
 
