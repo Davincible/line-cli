@@ -7,7 +7,9 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/kongesque/line-cli/internal/messaging"
 )
@@ -26,6 +28,7 @@ func (a *App) messageCommand(command string, args []string) error {
 	}
 	jsonOutput := fs.Bool("json", false, "write JSON to stdout")
 	limit := 20
+	var since string
 	var text string
 	var stdin bool
 	var replyTo string
@@ -33,7 +36,8 @@ func (a *App) messageCommand(command string, args []string) error {
 	var attachment *messaging.Attachment
 	showIDs := fs.Bool("show-ids", false, "show message IDs in human output")
 	if command == "messages" {
-		fs.IntVar(&limit, "limit", 20, "recent messages to fetch (1–100)")
+		fs.IntVar(&limit, "limit", 20, fmt.Sprintf("messages to fetch, newest first (1–%d; past 100 pages back through history)", messaging.MaxHistory))
+		fs.StringVar(&since, "since", "", "stop at messages older than this: YYYY-MM-DD, RFC 3339, or a duration such as 72h or 30d")
 	} else {
 		fs.StringVar(&text, "text", "", "message text")
 		fs.BoolVar(&stdin, "stdin", false, "read UTF-8 message text from stdin")
@@ -58,8 +62,12 @@ func (a *App) messageCommand(command string, args []string) error {
 		}
 	}
 	promptText := false
-	if limit < 1 || limit > 100 {
-		return errors.New("limit must be between 1 and 100")
+	if limit < 1 || limit > messaging.MaxHistory {
+		return fmt.Errorf("limit must be between 1 and %d", messaging.MaxHistory)
+	}
+	sinceMillis, err := parseSince(since, time.Now())
+	if err != nil {
+		return err
 	}
 	if command == "send" {
 		if replyTo != "" {
@@ -195,9 +203,18 @@ func (a *App) messageCommand(command string, args []string) error {
 		}
 		return err
 	}
-	messages, err := client.History(chat, limit)
+	messages, err := client.HistorySince(chat, limit, sinceMillis)
 	if err != nil {
 		return err
+	}
+	if *jsonOutput {
+		names, ok := a.senderNames(messages)
+		if !ok {
+			fmt.Fprintln(a.Err, "Some sender names are unavailable; from_name is omitted for them.")
+		}
+		for i := range messages {
+			messages[i].FromName = names[messages[i].From]
+		}
 	}
 	failed := 0
 	for _, message := range messages {
@@ -217,4 +234,26 @@ func (a *App) messageCommand(command string, args []string) error {
 		return fmt.Errorf("%d messages could not be decrypted; see each message's status/error", failed)
 	}
 	return nil
+}
+
+// parseSince turns --since into Unix milliseconds. Empty means no bound.
+func parseSince(value string, now time.Time) (int64, error) {
+	if value == "" {
+		return 0, nil
+	}
+	if t, err := time.ParseInLocation("2006-01-02", value, time.Local); err == nil {
+		return t.UnixMilli(), nil
+	}
+	if t, err := time.Parse(time.RFC3339, value); err == nil {
+		return t.UnixMilli(), nil
+	}
+	if days, ok := strings.CutSuffix(value, "d"); ok {
+		if n, err := strconv.Atoi(days); err == nil && n > 0 {
+			return now.AddDate(0, 0, -n).UnixMilli(), nil
+		}
+	}
+	if d, err := time.ParseDuration(value); err == nil && d > 0 {
+		return now.Add(-d).UnixMilli(), nil
+	}
+	return 0, errors.New("since must be YYYY-MM-DD, RFC 3339, or a positive duration such as 72h or 30d")
 }

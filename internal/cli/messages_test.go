@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/kongesque/line-cli/internal/messaging"
 	"github.com/kongesque/line-cli/internal/session"
@@ -26,7 +27,7 @@ func (f *messageAPI) SendMessage(_ int64, msg *line.Message) (*line.Message, err
 func TestMessageArgumentsValidateBeforeSessionAccess(t *testing.T) {
 	for _, args := range [][]string{
 		{"messages", "--help"}, {"send", "--help"}, {"messages"},
-		{"messages", "Uaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "--limit", "0"}, {"messages", "Uaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "--limit", "101"},
+		{"messages", "Uaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "--limit", "0"}, {"messages", "Uaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "--limit", "10001"},
 		{"send", "Uaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}, {"send", "Uaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "--text", ""},
 		{"send", "Uaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "--text", "hello", "--stdin"},
 		{"send", "bad\nname", "--text", "hello"},
@@ -81,5 +82,27 @@ func TestSendStdinHasBoundedSize(t *testing.T) {
 	a.Lock = func() (func(), error) { t.Fatal("session opened before input validation"); return nil, nil }
 	if err := a.Run([]string{"send", "Uaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "--stdin"}); err == nil {
 		t.Fatal("accepted oversized stdin")
+	}
+}
+
+func TestParseSince(t *testing.T) {
+	now := time.Date(2026, 10, 4, 12, 0, 0, 0, time.UTC)
+	for in, want := range map[string]int64{
+		"":                     0,
+		"72h":                  now.Add(-72 * time.Hour).UnixMilli(),
+		"30d":                  now.AddDate(0, 0, -30).UnixMilli(),
+		"2026-09-01T00:00:00Z": time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC).UnixMilli(),
+	} {
+		if got, err := parseSince(in, now); err != nil || got != want {
+			t.Errorf("%q: got %d want %d err %v", in, got, want, err)
+		}
+	}
+	if got, err := parseSince("2026-09-01", now); err != nil || got != time.Date(2026, 9, 1, 0, 0, 0, 0, time.Local).UnixMilli() {
+		t.Errorf("date: %d %v", got, err)
+	}
+	for _, bad := range []string{"yesterday", "-3d", "0d", "-1h"} {
+		if _, err := parseSince(bad, now); err == nil {
+			t.Errorf("accepted %q", bad)
+		}
 	}
 }

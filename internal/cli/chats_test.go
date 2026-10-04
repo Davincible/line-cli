@@ -55,8 +55,13 @@ func (f *chatAPI) GetChats(ids []string, members, invitees bool) (*line.GetChats
 	return result, nil
 }
 
-func TestChatsJSONCompatibilityAndEmptySearch(t *testing.T) {
-	f := &chatAPI{boxes: []line.MessageBox{{ID: "u-one", UnreadCount: "2"}}, names: map[string]string{"u-one": "Alice"}}
+// Fork contract: chats --json is the table as data. Active chats only unless
+// --all, named, dated, newest first.
+func TestChatsJSONIsNamedDatedAndNewestFirst(t *testing.T) {
+	f := &chatAPI{boxes: []line.MessageBox{
+		{ID: "u-old", UnreadCount: "0", LastMessages: []line.Message{{CreatedTime: "1000"}}},
+		{ID: "u-new", UnreadCount: "2", LastMessages: []line.Message{{CreatedTime: "2000"}}},
+	}, names: map[string]string{"u-old": "Bob", "u-new": "Alice"}}
 	a := chatTestApp(f)
 	if err := a.Run([]string{"chats", "--json"}); err != nil {
 		t.Fatal(err)
@@ -65,8 +70,16 @@ func TestChatsJSONCompatibilityAndEmptySearch(t *testing.T) {
 	if err := json.Unmarshal([]byte(a.Out.(fmt.Stringer).String()), &result); err != nil {
 		t.Fatal(err)
 	}
-	if len(result) != 1 || len(result[0]) != 3 || result[0]["id"] != "u-one" || result[0]["unread_count"] != float64(2) || len(f.batches) != 0 || f.options[0].ActiveOnly {
-		t.Fatal("original JSON contract changed")
+	if len(result) != 2 || result[0]["id"] != "u-new" || result[0]["name"] != "Alice" || result[0]["updated_at"] != float64(2000) ||
+		result[0]["unread_count"] != float64(2) || result[1]["name"] != "Bob" || !f.options[0].ActiveOnly {
+		t.Fatalf("chats JSON contract: %v", result)
+	}
+	a = chatTestApp(f)
+	if err := a.Run([]string{"chats", "--json", "--all"}); err != nil {
+		t.Fatal(err)
+	}
+	if f.options[len(f.options)-1].ActiveOnly {
+		t.Fatal("--all must include inactive chats")
 	}
 	a = chatTestApp(f)
 	if err := a.Run([]string{"chats", "--search", "nobody", "--json"}); err != nil {

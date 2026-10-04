@@ -27,7 +27,7 @@ func (a *App) downloadCommand(args []string) error {
 		fmt.Fprintln(a.Err, "Download an image, video, audio, or file (up to 20 MiB).")
 		fs.PrintDefaults()
 	}
-	id := fs.String("message", "", "attachment message ID (within the latest 100 messages)")
+	id := fs.String("message", "", "attachment message ID (within the latest 2000 messages)")
 	output := fs.String("output", "", "destination path (never overwritten), or - for binary stdout")
 	jsonOutput := fs.Bool("json", false, "write JSON summary")
 	if err := fs.Parse(args); err != nil {

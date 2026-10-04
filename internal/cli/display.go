@@ -33,28 +33,9 @@ func (a *App) renderMessages(chat string, messages []messaging.Message, ids bool
 		_, err := fmt.Fprintln(a.Out, "No recent messages in "+terminalText(chat)+".")
 		return err
 	}
-	names := make(map[string]string)
-	if s, err := a.Manager.Store.Load(); err == nil && s != nil {
-		names[s.MID] = "You"
-	}
-	var senders []string
-	seen := make(map[string]bool)
-	for _, m := range messages {
-		if m.From != "" && names[m.From] == "" && !seen[m.From] {
-			senders = append(senders, m.From)
-			seen[m.From] = true
-		}
-	}
-	if len(senders) > 0 {
-		var response *line.ContactsResponse
-		err := a.Manager.Do(func(api session.API) (err error) { response, err = api.GetContactsV2(senders); return })
-		if err == nil && response != nil {
-			for id, c := range response.Contacts {
-				names[id] = c.Contact.EffectiveDisplayName()
-			}
-		} else {
-			fmt.Fprintln(a.Err, "Some sender names are unavailable; showing IDs instead.")
-		}
+	names, ok := a.senderNames(messages)
+	if !ok {
+		fmt.Fprintln(a.Err, "Some sender names are unavailable; showing IDs instead.")
 	}
 	ordered := append([]messaging.Message(nil), messages...)
 	sort.SliceStable(ordered, func(i, j int) bool {
@@ -119,4 +100,36 @@ func (a *App) renderMessages(chat string, messages []messaging.Message, ids bool
 	}
 	_, err := fmt.Fprintf(a.Out, "Write: line send %q\n", terminalText(chat))
 	return err
+}
+
+// senderNames maps each sender MID to a display name, "You" for this account.
+// Lookups are batched at 100, the contacts API limit. ok is false when any
+// batch failed; the map still holds every name that did resolve.
+func (a *App) senderNames(messages []messaging.Message) (map[string]string, bool) {
+	names := make(map[string]string)
+	if s, err := a.Manager.Store.Load(); err == nil && s != nil {
+		names[s.MID] = "You"
+	}
+	var senders []string
+	seen := make(map[string]bool)
+	for _, m := range messages {
+		if m.From != "" && names[m.From] == "" && !seen[m.From] {
+			senders = append(senders, m.From)
+			seen[m.From] = true
+		}
+	}
+	ok := true
+	for start := 0; start < len(senders); start += 100 {
+		batch := senders[start:min(start+100, len(senders))]
+		var response *line.ContactsResponse
+		err := a.Manager.Do(func(api session.API) (err error) { response, err = api.GetContactsV2(batch); return })
+		if err != nil || response == nil {
+			ok = false
+			continue
+		}
+		for id, c := range response.Contacts {
+			names[id] = c.Contact.EffectiveDisplayName()
+		}
+	}
+	return names, ok
 }

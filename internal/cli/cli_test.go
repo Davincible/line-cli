@@ -87,8 +87,8 @@ func TestHumanOutputCannotInjectTerminalControls(t *testing.T) {
 
 func TestChatsPaginatesAndDeduplicates(t *testing.T) {
 	f := &readAPI{pages: []*line.MessageBoxesResponse{
-		{MessageBoxes: []line.MessageBox{{ID: "a", UnreadCount: "1"}, {ID: "b"}}, HasNext: true},
-		{MessageBoxes: []line.MessageBox{{ID: "b"}, {ID: "c"}}},
+		{MessageBoxes: []line.MessageBox{{ID: "ua", UnreadCount: "1"}, {ID: "ub"}}, HasNext: true},
+		{MessageBoxes: []line.MessageBox{{ID: "ub"}, {ID: "uc"}}},
 	}}
 	a, out, _ := testApp(f)
 	if err := a.Run([]string{"chats", "--json"}); err != nil {
@@ -98,7 +98,7 @@ func TestChatsPaginatesAndDeduplicates(t *testing.T) {
 	if err := json.Unmarshal(out.Bytes(), &result); err != nil {
 		t.Fatal(err)
 	}
-	if len(result) != 3 || len(f.cursors) != 2 || f.cursors[1] != "b" {
+	if len(result) != 3 || len(f.cursors) != 2 || f.cursors[1] != "ub" {
 		t.Fatal("incorrect pagination")
 	}
 }

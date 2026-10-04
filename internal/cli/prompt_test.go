@@ -273,8 +273,9 @@ func TestReadableHistoryPreservesJSONAndResolvesSenders(t *testing.T) {
 	if err := json.Unmarshal(out.Bytes(), &history); err != nil || history[0]["id"] != "456" {
 		t.Fatal("JSON ordering changed", err)
 	}
-	if len(history[0]) != 8 {
-		t.Fatalf("JSON fields changed: %d", len(history[0]))
+	// Fork: from_name is the ninth field, resolved like the readable view.
+	if len(history[0]) != 9 || history[0]["from_name"] != "You" || history[1]["from_name"] != "Alice" {
+		t.Fatalf("JSON fields changed: %v", history[0])
 	}
 }
 

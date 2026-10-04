@@ -27,7 +27,7 @@ func (a *App) chatCommand(args []string) error {
 	search := fs.String("search", "", "find chat names containing this text (case-insensitive)")
 	limit := fs.Int("limit", 20, "maximum rows; 0 shows all")
 	ids := fs.Bool("show-ids", false, "show full IDs below names")
-	jsonOutput := fs.Bool("json", false, "write JSON (all chats, unlimited by default)")
+	jsonOutput := fs.Bool("json", false, "write JSON with name and updated_at, newest first (unlimited by default)")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil
@@ -51,17 +51,11 @@ func (a *App) chatCommand(args []string) error {
 		return err
 	}
 	defer unlock()
-	// Preserve the original unbounded ID-only JSON contract for scripts.
-	legacyJSON := *jsonOutput && *search == ""
-	chats, err := a.chatBoxes(!*all && !*jsonOutput && *search == "", !legacyJSON)
+	// Fork change: JSON carries the same rows as the table, named and dated,
+	// instead of upstream's unordered ID-only list. --all includes inactive chats.
+	chats, err := a.chatBoxes(!*all && *search == "", true)
 	if err != nil {
 		return err
-	}
-	if legacyJSON {
-		if limitSet && *limit > 0 {
-			chats = chats[:min(*limit, len(chats))]
-		}
-		return a.json(chats)
 	}
 	sort.SliceStable(chats, func(i, j int) bool { return chats[i].UpdatedAt > chats[j].UpdatedAt })
 	if *jsonOutput && !limitSet {
