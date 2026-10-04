@@ -147,4 +147,29 @@ func TestLiveHistoryPaging(t *testing.T) {
 		}
 	}
 	t.Logf("paged %d messages in pages of 5; identical to one plain read", len(paged))
+
+	// Asking for more than the chat holds must end cleanly at its first message.
+	beyond, err := client.History(chat, len(whole)+50)
+	if err != nil || len(beyond) != len(whole) {
+		t.Fatalf("reading past the start: %d messages, err %v", len(beyond), err)
+	}
+	// And LINE's answer to a cursor at the very first message, asked directly.
+	first := whole[len(whole)-1]
+	var raw []*line.Message
+	if err := client.Session.Do(func(api session.API) (err error) {
+		raw, err = api.GetPreviousMessagesV2(chat, first.ID, first.CreatedTime, 5)
+		return
+	}); err != nil {
+		t.Fatalf("cursor at the first message: %v", err)
+	}
+	newer := 0
+	for _, m := range raw {
+		if m != nil && m.ID != first.ID {
+			newer++
+		}
+	}
+	if newer != 0 {
+		t.Fatalf("cursor at the first message returned %d other messages", newer)
+	}
+	t.Logf("cursor at the first message: %d rows, none older; read past the start returned all %d", len(raw), len(beyond))
 }

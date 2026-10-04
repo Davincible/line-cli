@@ -16,9 +16,9 @@ import (
 // page, which is what LINE did against a live group chat on 4 October 2026.
 type chatLog struct {
 	*fakeAPI
-	n        int
-	recent   []int
-	cursors  []string
+	n       int
+	recent  []int
+	cursors []string
 }
 
 func (f *chatLog) msg(id int) *line.Message {
@@ -122,5 +122,42 @@ func TestHistoryRejectsOutOfRangeLimits(t *testing.T) {
 		if _, err := c.History("u-peer", n); err == nil {
 			t.Fatal("accepted limit", n)
 		}
+	}
+}
+
+// stuckLog ignores the cursor and always answers with the newest page.
+type stuckLog struct{ *chatLog }
+
+func (f *stuckLog) GetPreviousMessagesV2(_ string, _ string, _ json.Number, count int) ([]*line.Message, error) {
+	return f.GetRecentMessagesV2("", count)
+}
+
+func TestHistoryErrorsWhenLINEIgnoresTheCursor(t *testing.T) {
+	c, log := pagingClient(t, 500)
+	c.Session.NewClient = func(string) session.API { return &stuckLog{log} }
+	if got, err := c.History("u-peer", 300); err == nil || !strings.Contains(err.Error(), "did not advance") {
+		t.Fatalf("stuck cursor must fail loudly, got %d messages, err %v", len(got), err)
+	}
+}
+
+// nilLog answers the first page with only nil messages.
+type nilLog struct{ *chatLog }
+
+func (f *nilLog) GetRecentMessagesV2(_ string, limit int) ([]*line.Message, error) {
+	return make([]*line.Message, limit), nil
+}
+
+func TestHistoryDoesNotPanicOnAnAllNilFirstPage(t *testing.T) {
+	c, log := pagingClient(t, 500)
+	c.Session.NewClient = func(string) session.API { return &nilLog{log} }
+	if got, err := c.History("u-peer", 300); err != nil || len(got) != 0 {
+		t.Fatalf("got %d, err %v", len(got), err)
+	}
+}
+
+func TestHistoryStopsOnAShortPageWithoutAnExtraRequest(t *testing.T) {
+	c, log := pagingClient(t, 150) // 100 + one short page of 51 (50 new + cursor)
+	if got, err := c.History("u-peer", 5000); err != nil || len(got) != 150 || len(log.cursors) != 1 {
+		t.Fatalf("got %d, cursors %v, err %v", len(got), log.cursors, err)
 	}
 }

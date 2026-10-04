@@ -69,6 +69,15 @@ func (a *App) messageCommand(command string, args []string) error {
 	if err != nil {
 		return err
 	}
+	// --since bounds by time; without an explicit --limit it must not also be
+	// capped at the default 20.
+	if sinceMillis > 0 {
+		limitSet := false
+		fs.Visit(func(f *flag.Flag) { limitSet = limitSet || f.Name == "limit" })
+		if !limitSet {
+			limit = messaging.MaxHistory
+		}
+	}
 	if command == "send" {
 		if replyTo != "" {
 			if err := messaging.ValidateMessageID(replyTo); err != nil {

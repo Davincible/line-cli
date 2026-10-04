@@ -123,8 +123,8 @@ type Message struct {
 	Reactions   []line.MessageReaction `json:"reactions,omitempty"`
 }
 
-// MaxHistory bounds one read. LINE serves 100 messages per request, so this is
-// at most 100 requests; it exists so a typo cannot walk a chat forever.
+// MaxHistory bounds one read so a typo cannot walk a chat forever. LINE serves
+// 100 messages per request and repeats the cursor, so this is at most 101 requests.
 const MaxHistory = 10000
 
 // pageSize is LINE's per-request maximum. A variable only so the live test
@@ -169,8 +169,9 @@ func (c *Client) HistorySince(chat string, limit int, sinceMillis int64) ([]Mess
 // rawHistory pages newest to oldest. stop is called on each message in order;
 // when it returns true that message is excluded and paging ends. LINE returns
 // the cursor message again at the top of each page (verified live 4 October
-// 2026), so results are deduplicated by ID, and a page with nothing new is the
-// start of the chat.
+// 2026), so results are deduplicated by ID. A short page is the start of the
+// chat, as it is for the first page. A full page that adds nothing means LINE
+// ignored the cursor; that is an error, never a silently short result.
 func (c *Client) rawHistory(chat string, limit int, stop func(*line.Message) bool) ([]*line.Message, error) {
 	result := make([]*line.Message, 0, min(limit, pageSize))
 	seen := make(map[string]bool)
@@ -198,7 +199,7 @@ func (c *Client) rawHistory(chat string, limit int, stop func(*line.Message) boo
 	if err := c.Session.Do(func(api session.API) (err error) { page, err = api.GetRecentMessagesV2(chat, first); return }); err != nil {
 		return nil, err
 	}
-	if _, done := add(page); done || len(page) < first {
+	if _, done := add(page); done || len(page) < first || len(result) == 0 {
 		return result, nil
 	}
 	for len(result) < limit {
@@ -215,8 +216,11 @@ func (c *Client) rawHistory(chat string, limit int, stop func(*line.Message) boo
 			return nil, err
 		}
 		added, done := add(page)
-		if done || added == 0 {
+		if done || len(page) < count {
 			break
+		}
+		if added == 0 {
+			return nil, errors.New("LINE history paging did not advance; retry, or lower --limit")
 		}
 	}
 	return result, nil

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"sync"
 	"time"
 
@@ -280,6 +281,19 @@ func (m *Manager) do(ctx context.Context, call func(API) error, retry bool) erro
 		return err
 	}
 	err = call(api)
+	// Fork: a read that hit a timeout, 408, 429, 5xx or a dropped connection is
+	// retried twice with backoff, using the classification token refresh uses.
+	// Mutations (retry == false) are never replayed.
+	for attempt := 1; retry && err != nil && attempt <= 2 && line.IsTransientError(err); attempt++ {
+		wait := m.Wait
+		if wait == nil {
+			wait = waitRefresh
+		}
+		if werr := wait(ctx, time.Duration(attempt*attempt)*time.Second); werr != nil {
+			return werr
+		}
+		err = call(api)
+	}
 	if err == nil {
 		return nil
 	}
@@ -411,7 +425,7 @@ func (e *RemoteError) Error() string {
 		}
 		return fmt.Sprintf("LINE %s requires authentication; run line login", e.Action)
 	}
-	return fmt.Sprintf("LINE %s failed; check your connection and LINE account settings", e.Action)
+	return fmt.Sprintf("LINE %s failed; check your connection and LINE account settings%s", e.Action, debugCause(e.cause))
 }
 func (e *RemoteError) Unwrap() error { return e.cause }
 
@@ -445,4 +459,18 @@ func (m *Manager) ReserveSequence() (int64, error) {
 		return 0, err
 	}
 	return next, nil
+}
+
+// debugCause names the failure class when LINE_CLI_DEBUG=1: the HTTP status and
+// LINE code for a response error, otherwise the Go error. Response bodies are
+// never included, so message content and tokens stay out of terminals and logs.
+func debugCause(err error) string {
+	if err == nil || os.Getenv("LINE_CLI_DEBUG") != "1" {
+		return ""
+	}
+	var response *line.ResponseError
+	if errors.As(err, &response) {
+		return " [" + response.Error() + "]"
+	}
+	return " [" + err.Error() + "]"
 }

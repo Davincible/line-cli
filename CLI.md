@@ -413,8 +413,8 @@ Ordinary CLI and network errors exit 1. Storage errors have
 | `whoami` | Profile and account ID. |
 | `contacts` | Friend names and IDs. |
 | `contacts --mid MID` | One record per unique requested MID, with a lookup status. |
-| `chats` | ID, type, unread count, and optional activity time. |
-| `messages` | ID, sender, time, content, encryption, and status. |
+| `chats` | ID, type, unread count, name, and `updated_at` (fork: newest first, active only unless `--all`). |
+| `messages` | ID, sender, `from_name` (fork), time, content, encryption, and status. |
 | `send` | Message ID, chat ID, encryption, group-key registration, and sequence. |
 | `download` | Output path, byte count, and message ID. |
 | `react`, `unsend` | Action, chat ID, message ID, and sequence. |

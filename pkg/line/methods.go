@@ -861,8 +861,9 @@ func (c *Client) GetRecentMessagesV2(chatMid string, limit int) ([]*Message, err
 	return wrapper.Data, nil
 }
 
-// PreviousMessagesRequest pages backwards through a chat's history. The end
-// message is exclusive in practice but callers should still deduplicate by ID.
+// PreviousMessagesRequest pages backwards through a chat's history. LINE
+// includes the end message itself at the top of the page (verified live
+// 4 October 2026), so callers deduplicate by ID.
 // Shape taken from the LINE Chrome extension, as reproduced by OkLine
 // (okline/services/messaging.py) and linejs (client/features/chat/fetcher.ts).
 type PreviousMessagesRequest struct {

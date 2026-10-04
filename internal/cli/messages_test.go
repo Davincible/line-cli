@@ -106,3 +106,29 @@ func TestParseSince(t *testing.T) {
 		}
 	}
 }
+
+type countingAPI struct {
+	messageAPI
+	limits []int
+}
+
+func (f *countingAPI) GetRecentMessagesV2(_ string, limit int) ([]*line.Message, error) {
+	f.limits = append(f.limits, limit)
+	return nil, nil
+}
+
+func TestSinceWithoutLimitIsNotCappedAtTwenty(t *testing.T) {
+	for args, want := range map[string]int{"--since 7d": 100, "--since 7d --limit 30": 30, "": 20} {
+		a, _, _ := testApp(nil)
+		f := &countingAPI{}
+		a.Manager.Store = &testStore{state: &session.State{MID: "u-self", AccessToken: "token", NoE2EE: true}}
+		a.Manager.NewClient = func(string) session.API { return f }
+		run := append([]string{"messages", "Uaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "--json"}, strings.Fields(args)...)
+		if err := a.Run(run); err != nil {
+			t.Fatal(args, err)
+		}
+		if len(f.limits) != 1 || f.limits[0] != want {
+			t.Errorf("%q: first page asked for %v, want %d", args, f.limits, want)
+		}
+	}
+}
