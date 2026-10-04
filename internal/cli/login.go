@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/kongesque/line-cli/internal/session"
@@ -29,6 +30,7 @@ func (a *App) loginCommand(args []string) error {
 	fs.BoolVar(&options.qrURL, "qr-url", false, "show the sensitive one-time URL instead of a terminal QR code")
 	fs.BoolVar(&options.force, "force", false, "skip saved-session replacement confirmation")
 	fs.BoolVar(&options.headless, "headless", false, "Linux: enroll headless host-key storage; preserve existing protection")
+	takeOver := fs.Bool("take-over", false, "log in even though LINE_CLI_SESSION_HOST names another machine (that machine is signed out)")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil
@@ -37,6 +39,9 @@ func (a *App) loginCommand(args []string) error {
 	}
 	if fs.NArg() != 0 {
 		return errors.New("unexpected arguments; run line login --help. LINE was not contacted")
+	}
+	if err := checkSessionHost(*takeOver); err != nil {
+		return err
 	}
 	emailSet := false
 	fs.Visit(func(f *flag.Flag) {
@@ -169,4 +174,25 @@ func (a *App) loginQR(options loginOptions) error {
 	}
 	_, err = fmt.Fprintf(a.Out, "Signed in as %s. Session saved securely.\nNext: line chats\n", terminalText(profile.DisplayName))
 	return err
+}
+
+// checkSessionHost is a fork guard. LINE keeps one Chrome-style session per
+// account, so a login on any other machine (a second laptop, a server, a cloud
+// session) silently signs out the one that holds it and kills its hub.
+// LINE_CLI_SESSION_HOST names the machine that owns the session; login
+// elsewhere is refused unless --take-over is given. Unset means no guard.
+func checkSessionHost(takeOver bool) error {
+	owner := strings.TrimSpace(os.Getenv("LINE_CLI_SESSION_HOST"))
+	if owner == "" || takeOver {
+		return nil
+	}
+	host, err := os.Hostname()
+	if err != nil {
+		return fmt.Errorf("cannot read this machine's hostname to check LINE_CLI_SESSION_HOST: %w", err)
+	}
+	short, _, _ := strings.Cut(host, ".")
+	if strings.EqualFold(short, owner) || strings.EqualFold(host, owner) {
+		return nil
+	}
+	return fmt.Errorf("the LINE session lives on %q, and this is %q. LINE allows one such session per account, so logging in here would sign %q out. Use line on %q instead, or pass --take-over to move the session here. LINE was not contacted", owner, short, owner, owner)
 }

@@ -30,7 +30,8 @@ Everyday commands:
 
 More commands:
   auth        Inspect local session storage (auth status)
-  watch       Stream live events (--json)
+  watch       Stream live events (--json); --log runs the hub
+  events      Read or follow the hub's event log; any number can run at once
   download    Save an image, video, audio, or file attachment
   react       Add or remove a reaction
   unsend      Retract one of your own messages
@@ -100,6 +101,8 @@ func (a *App) Run(args []string) error {
 		return a.actionCommand(command, args[1:])
 	case "watch":
 		return a.watchCommand(args[1:])
+	case "events":
+		return a.eventsCommand(args[1:])
 	case "contacts":
 		return a.contactsCommand(args[1:])
 	case "chats":

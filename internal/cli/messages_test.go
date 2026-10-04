@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -130,5 +131,25 @@ func TestSinceWithoutLimitIsNotCappedAtTwenty(t *testing.T) {
 		if len(f.limits) != 1 || f.limits[0] != want {
 			t.Errorf("%q: first page asked for %v, want %d", args, f.limits, want)
 		}
+	}
+}
+
+func TestLoginRefusedOnAMachineThatDoesNotOwnTheSession(t *testing.T) {
+	host, _ := os.Hostname()
+	short, _, _ := strings.Cut(host, ".")
+	t.Setenv("LINE_CLI_SESSION_HOST", "some-other-machine")
+	if err := checkSessionHost(false); err == nil || !strings.Contains(err.Error(), "some-other-machine") {
+		t.Fatalf("must refuse: %v", err)
+	}
+	if err := checkSessionHost(true); err != nil {
+		t.Fatal("--take-over must be allowed")
+	}
+	t.Setenv("LINE_CLI_SESSION_HOST", short)
+	if err := checkSessionHost(false); err != nil {
+		t.Fatalf("owner host refused: %v", err)
+	}
+	t.Setenv("LINE_CLI_SESSION_HOST", "")
+	if err := checkSessionHost(false); err != nil {
+		t.Fatal("unset means no guard")
 	}
 }

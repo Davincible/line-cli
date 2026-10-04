@@ -38,7 +38,9 @@ func run() int {
 		Context:          ctx, WatchLock: session.WatchLock,
 		In:  in,
 		Out: os.Stdout, Err: os.Stderr, Version: version, Distribution: distribution,
-		Manager: session.NewManager(session.KeychainStore{}), Lock: session.Lock,
+		Manager: session.NewManager(session.KeychainStore{}),
+		// Fork: queue for the session lock instead of failing at once.
+		Lock: session.WaitingLock(ctx, session.Lock, session.LockWaitFromEnv(), os.Stderr),
 		Password: func() (string, error) {
 			return readPassword(ctx, stdinFD, in, os.Stderr)
 		},

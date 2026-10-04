@@ -328,6 +328,21 @@ Use `revision` to remove duplicates in consumers. If the process stops between
 writing an event and saving its checkpoint, the last event may appear again.
 Only one watcher can run at a time.
 
+### Many listeners: the hub (fork)
+
+Only one `line watch` can run per account. To let several programs follow events at once,
+run one watcher as the hub and have every program read its log:
+
+```sh
+line watch --log default            # the hub; on David's Mac the line-hub agent runs this
+line events --follow                # any number of these, anywhere on the machine
+line events --follow --chat CHAT_ID # one chat only
+line events --status                # heartbeat; exits 1 if the hub is not running
+```
+
+The log holds decrypted messages: the directory is 0700, files 0600, kept 14 days by default
+(`--retain`). `line events` needs no session and takes no lock.
+
 ## Updating LINE CLI
 
 ```sh

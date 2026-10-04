@@ -13,6 +13,10 @@ Branch `davincible`, based on upstream tag `v0.4.0`. Built into `line` on David'
 | `chats --json` is the table as data: `name`, `updated_at`, newest first, active chats unless `--all` | Upstream JSON was an unordered list of IDs, including inactive chats, with no names |
 | `download`, `react` and `unsend` find a message within the latest 2,000, not 100 | Same paging |
 | Reads retry twice (1 s, then 4 s) on a timeout, 408, 429, 5xx or dropped connection | Upstream reported any blip as `LINE request failed`. Mutations are still never replayed |
+| Commands queue for the session lock (up to 60 s, `LINE_CLI_LOCK_WAIT`) and say so, instead of failing with "session is busy" | Two agents reading at once, or a read during the watcher's short lock, used to error |
+| `line watch --log DIR` is the **hub**: events go to daily files (dir 0700, files 0600, `--retain`, default 14 days) plus a `hub.json` heartbeat | LINE allows one watcher and one resume position per account, so only one listener could ever run |
+| `line events [--follow] [--chat ID] [--from-revision N]` reads the hub's files; `line events --status` checks the heartbeat | Any number of readers, no session and no lock; deduplicates the one event a hub crash can replay; warns once when the hub stops |
+| `line login` refuses on a machine other than `LINE_CLI_SESSION_HOST` unless `--take-over` | LINE has one Chrome-style session per account; a login anywhere else silently signs the owner out and kills its hub |
 | `LINE_CLI_DEBUG=1` adds the failure class (HTTP status and LINE code, or the Go error) to `LINE request failed` | Response bodies stay out, as upstream intended |
 
 The paging request shape comes from the LINE Chrome extension as reproduced by OkLine
@@ -31,6 +35,20 @@ cursor, and the read fails rather than returning a silently short result. `--sin
 - Reviewed independently on 4 October for loops, wrong results and API hammering. Its three
   defects (`--since` capped at 20, a stuck cursor read as the start of the chat, a panic on an
   all-null first page) are fixed and each has a test.
+
+## Concurrency model
+
+- **One session, one machine.** The session lives on `LINE_CLI_SESSION_HOST` (sekura). Other
+  machines and cloud sessions never log in; they ask a session on sekura.
+- **One watcher, the hub.** On sekura the `line-hub` launchd agent runs
+  `line watch --log default`. Nothing else runs `line watch`.
+- **Many readers.** Listeners use `line events --follow`; they cannot collide.
+- **Commands queue.** `messages`, `chats`, `send` and the rest wait their turn for the session
+  lock, so parallel callers succeed one after another rather than failing.
+
+Verified live 4 October 2026 with the hub running: six simultaneous `line messages` calls all
+succeeded within 6 s (upstream fails five of them), and three `line events --follow` readers ran
+against one hub.
 
 ## Keeping up with upstream
 
