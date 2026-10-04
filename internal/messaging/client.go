@@ -117,28 +117,107 @@ type Message struct {
 	Text        string                 `json:"text"`
 	Encrypted   bool                   `json:"encrypted"`
 	Status      string                 `json:"status"`
+	FromName    string                 `json:"from_name,omitempty"`
 	Error       string                 `json:"error,omitempty"`
 	ReplyTo     string                 `json:"reply_to,omitempty"`
 	Reactions   []line.MessageReaction `json:"reactions,omitempty"`
 }
 
+// MaxHistory bounds one read. LINE serves 100 messages per request, so this is
+// at most 100 requests; it exists so a typo cannot walk a chat forever.
+const MaxHistory = 10000
+
+// pageSize is LINE's per-request maximum. A variable only so the live test
+// can force paging on a short chat.
+var pageSize = 100
+
+// FindDepth is how far back download, react and unsend look for a message ID.
+const FindDepth = 2000
+
+// History returns up to limit messages, newest first.
 func (c *Client) History(chat string, limit int) ([]Message, error) {
+	return c.HistorySince(chat, limit, 0)
+}
+
+// HistorySince returns up to limit messages newest first, stopping at the first
+// message created before sinceMillis (0 means no time bound). Past the first
+// 100 it pages back with getPreviousMessagesV2WithRequest.
+func (c *Client) HistorySince(chat string, limit int, sinceMillis int64) ([]Message, error) {
 	if err := ValidateChatID(chat); err != nil {
 		return nil, err
 	}
-	if limit < 1 || limit > 100 {
-		return nil, errors.New("limit must be between 1 and 100")
+	if limit < 1 || limit > MaxHistory {
+		return nil, fmt.Errorf("limit must be between 1 and %d", MaxHistory)
 	}
-	var raw []*line.Message
-	if err := c.Session.Do(func(api session.API) (err error) { raw, err = api.GetRecentMessagesV2(chat, limit); return }); err != nil {
+	raw, err := c.rawHistory(chat, limit, func(m *line.Message) bool {
+		if sinceMillis <= 0 {
+			return false
+		}
+		ts, _ := m.CreatedTime.Int64()
+		return ts > 0 && ts < sinceMillis
+	})
+	if err != nil {
 		return nil, err
 	}
 	result := make([]Message, 0, len(raw))
 	for _, msg := range raw {
-		if msg == nil {
-			continue
-		}
 		result = append(result, c.Decode(chat, msg))
+	}
+	return result, nil
+}
+
+// rawHistory pages newest to oldest. stop is called on each message in order;
+// when it returns true that message is excluded and paging ends. LINE returns
+// the cursor message again at the top of each page (verified live 4 October
+// 2026), so results are deduplicated by ID, and a page with nothing new is the
+// start of the chat.
+func (c *Client) rawHistory(chat string, limit int, stop func(*line.Message) bool) ([]*line.Message, error) {
+	result := make([]*line.Message, 0, min(limit, pageSize))
+	seen := make(map[string]bool)
+	add := func(page []*line.Message) (added int, done bool) {
+		for _, msg := range page {
+			if msg == nil || (msg.ID != "" && seen[msg.ID]) {
+				continue
+			}
+			if msg.ID != "" {
+				seen[msg.ID] = true
+			}
+			if stop != nil && stop(msg) {
+				return added, true
+			}
+			result = append(result, msg)
+			added++
+			if len(result) >= limit {
+				return added, true
+			}
+		}
+		return added, false
+	}
+	first := min(limit, pageSize)
+	var page []*line.Message
+	if err := c.Session.Do(func(api session.API) (err error) { page, err = api.GetRecentMessagesV2(chat, first); return }); err != nil {
+		return nil, err
+	}
+	if _, done := add(page); done || len(page) < first {
+		return result, nil
+	}
+	for len(result) < limit {
+		oldest := result[len(result)-1]
+		delivered := oldest.DeliveredTime
+		if delivered == "" {
+			delivered = oldest.CreatedTime
+		}
+		count := min(pageSize, limit-len(result)+1)
+		if err := c.Session.Do(func(api session.API) (err error) {
+			page, err = api.GetPreviousMessagesV2(chat, oldest.ID, delivered, count)
+			return
+		}); err != nil {
+			return nil, err
+		}
+		added, done := add(page)
+		if done || added == 0 {
+			break
+		}
 	}
 	return result, nil
 }

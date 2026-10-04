@@ -45,16 +45,20 @@ func (c *Client) findMessage(chat, id string) (*line.Message, error) {
 	if err := ValidateMessageID(id); err != nil {
 		return nil, err
 	}
-	var messages []*line.Message
-	if err := c.Session.Do(func(api session.API) (err error) { messages, err = api.GetRecentMessagesV2(chat, 100); return }); err != nil {
+	var found *line.Message
+	if _, err := c.rawHistory(chat, FindDepth, func(msg *line.Message) bool {
+		if msg.ID == id {
+			found = msg
+			return true
+		}
+		return false
+	}); err != nil {
 		return nil, err
 	}
-	for _, msg := range messages {
-		if msg != nil && msg.ID == id {
-			return msg, nil
-		}
+	if found != nil {
+		return found, nil
 	}
-	return nil, errors.New("message was not found in the selected chat's 100 most recent messages")
+	return nil, fmt.Errorf("message was not found in the selected chat's %d most recent messages", FindDepth)
 }
 
 func (c *Client) React(chat, id, reaction string, remove bool) (*ActionResult, error) {

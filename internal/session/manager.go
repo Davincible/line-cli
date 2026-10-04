@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"crypto/rand"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
@@ -27,6 +28,7 @@ type API interface {
 	GetContactsV2([]string) (*line.ContactsResponse, error)
 	GetMessageBoxes(line.MessageBoxesOptions) (*line.MessageBoxesResponse, error)
 	GetRecentMessagesV2(string, int) ([]*line.Message, error)
+	GetPreviousMessagesV2(string, string, json.Number, int) ([]*line.Message, error)
 	GetBlockedContactIds() ([]string, error)
 	NegotiateE2EEPublicKey(string) (*line.E2EEPublicKey, error)
 	GetE2EEPublicKey(string, int, int) (*line.E2EEPublicKey, error)

@@ -861,6 +861,42 @@ func (c *Client) GetRecentMessagesV2(chatMid string, limit int) ([]*Message, err
 	return wrapper.Data, nil
 }
 
+// PreviousMessagesRequest pages backwards through a chat's history. The end
+// message is exclusive in practice but callers should still deduplicate by ID.
+// Shape taken from the LINE Chrome extension, as reproduced by OkLine
+// (okline/services/messaging.py) and linejs (client/features/chat/fetcher.ts).
+type PreviousMessagesRequest struct {
+	MessageBoxID  string           `json:"messageBoxId"`
+	EndMessageID  MessageIDWrapper `json:"endMessageId"`
+	MessagesCount int              `json:"messagesCount"`
+}
+
+// SyncReasonOperation is LINE's SyncReason.OPERATION, which the extension sends.
+const SyncReasonOperation = 3
+
+// GetPreviousMessagesV2 returns up to count messages older than the end
+// message, newest first.
+func (c *Client) GetPreviousMessagesV2(chatMid, endMessageID string, endDeliveredTime json.Number, count int) ([]*Message, error) {
+	req := PreviousMessagesRequest{MessageBoxID: chatMid, MessagesCount: count,
+		EndMessageID: MessageIDWrapper{MessageID: endMessageID, DeliveredTime: endDeliveredTime}}
+	resp, err := c.callRPC("TalkService", "getPreviousMessagesV2WithRequest", req, SyncReasonOperation)
+	if err != nil {
+		return nil, err
+	}
+	var wrapper struct {
+		Code    int        `json:"code"`
+		Message string     `json:"message"`
+		Data    []*Message `json:"data"`
+	}
+	if err := json.Unmarshal(resp, &wrapper); err != nil {
+		return nil, err
+	}
+	if wrapper.Code != 0 {
+		return nil, fmt.Errorf("getPreviousMessagesV2WithRequest failed: %s", wrapper.Message)
+	}
+	return wrapper.Data, nil
+}
+
 func (c *Client) UnsendMessage(reqSeq int64, messageID string) error {
 	_, err := c.callRPC("TalkService", "unsendMessage", reqSeq, messageID)
 	return err

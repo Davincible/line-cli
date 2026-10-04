@@ -104,3 +104,47 @@ func TestLiveHistory(t *testing.T) {
 		t.Fatalf("live encrypted history not verified for both direct and group chats (direct=%v group=%v)", verified[0], verified[2])
 	}
 }
+
+// Fork: proves getPreviousMessagesV2WithRequest paging against the real account.
+// Forces 5-message pages so a short chat still pages, then checks the paged
+// result is exactly what one plain read returns. Reports counts only.
+func TestLiveHistoryPaging(t *testing.T) {
+	if os.Getenv("LINE_CLI_LIVE_READ") != "1" {
+		t.Skip("set LINE_CLI_LIVE_READ=1 to validate history paging")
+	}
+	chat := os.Getenv("LINE_CLI_LIVE_CHAT")
+	if chat == "" {
+		t.Skip("set LINE_CLI_LIVE_CHAT to a chat ID with at least 12 messages")
+	}
+	unlock, err := session.Lock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer unlock()
+	client, err := New(session.NewManager(session.KeychainStore{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	whole, err := client.History(chat, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(whole) < 12 {
+		t.Skipf("chat has %d messages; need at least 12", len(whole))
+	}
+	defer func(n int) { pageSize = n }(pageSize)
+	pageSize = 5
+	paged, err := client.History(chat, len(whole))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(paged) != len(whole) {
+		t.Fatalf("paged %d messages, plain read %d", len(paged), len(whole))
+	}
+	for i := range whole {
+		if paged[i].ID != whole[i].ID {
+			t.Fatalf("order differs at %d", i)
+		}
+	}
+	t.Logf("paged %d messages in pages of 5; identical to one plain read", len(paged))
+}
