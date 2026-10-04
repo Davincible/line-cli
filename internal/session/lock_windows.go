@@ -45,3 +45,6 @@ func lockFile(path string) (func(), error) {
 	}
 	return func() { f.Close() }, nil
 }
+
+// WatchLockIntact is a no-op where the fork has not added lock-file checks.
+func WatchLockIntact() error { return nil }

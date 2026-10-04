@@ -50,6 +50,22 @@ Verified live 4 October 2026 with the hub running: six simultaneous `line messag
 succeeded within 6 s (upstream fails five of them), and three `line events --follow` readers ran
 against one hub.
 
+## How the one watcher is protected
+
+LINE gives an account one event stream and one resume position, so a second consumer does not
+just duplicate events, it steals them from the hub's log. Every path to that is closed:
+
+| Risk | Guard |
+| --- | --- |
+| Two watchers at once | `watch.lock` (flock). The second fails with "another line watch is already running" |
+| The lock file deleted under a running hub (it lived in `~/Library/Caches`, which macOS may purge) | Locks now live in `~/Library/Application Support/line-cli`. The hub re-checks every 15 s that the file at the lock path is still the one it holds, and stops if not; launchd restarts it on a fresh lock. Verified live 4 Oct by deleting the file: detected, restarted in seconds |
+| A plain `line watch`, or a second hub logging elsewhere, run while the hub is down | Refused once a hub has run on the machine (`hub.json` exists); `--direct` overrides. Verified live |
+| `line logout` under a running hub | Refused unless `--force` |
+| `line login` on another machine or a cloud session | Refused off `LINE_CLI_SESSION_HOST` unless `--take-over` |
+| The session syncing to another Mac | Not possible: the item is in the file-based `login.keychain-db`, which iCloud Keychain never syncs (checked 4 Oct) |
+| The hub dying unnoticed | `hub.json` heartbeat; `line events` warns once when it goes stale; a hub that stops on an error raises a macOS notification naming the reason, never message content (`LINE_CLI_NO_NOTIFY=1` disables) |
+| A crash between writing an event and checkpointing | The event is replayed once on restart; readers deduplicate by revision |
+
 ## Keeping up with upstream
 
 ```sh

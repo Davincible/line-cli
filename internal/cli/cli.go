@@ -9,8 +9,10 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 	"unicode"
 
+	"github.com/kongesque/line-cli/internal/events"
 	"github.com/kongesque/line-cli/internal/session"
 	"github.com/kongesque/line-cli/pkg/line"
 )
@@ -128,6 +130,10 @@ func (a *App) Run(args []string) error {
 	fs.Usage = func() { fmt.Fprintf(a.Err, "Usage: line %s [options]\n", command); fs.PrintDefaults() }
 	var jsonOutput bool
 	var showIDs bool
+	var force bool
+	if command == "logout" {
+		fs.BoolVar(&force, "force", false, "sign out even though the hub is running (it stops)")
+	}
 	if command == "whoami" {
 		fs.BoolVar(&showIDs, "show-ids", false, "show full IDs")
 		fs.BoolVar(&jsonOutput, "json", false, "write JSON to stdout")
@@ -147,6 +153,9 @@ func (a *App) Run(args []string) error {
 	}
 	defer unlock()
 	if command == "logout" {
+		if err := checkHubBeforeLogout(force); err != nil {
+			return err
+		}
 		if err := a.Manager.Store.Delete(); err != nil {
 			return err
 		}
@@ -307,4 +316,20 @@ func terminalText(s string) string {
 		}
 		return r
 	}, s)
+}
+
+// checkHubBeforeLogout refuses to delete the session under a running hub
+// (fork): the hub would die and every listener would go quiet.
+func checkHubBeforeLogout(force bool) error {
+	if force {
+		return nil
+	}
+	dir, err := events.DefaultLogDir()
+	if err != nil {
+		return nil
+	}
+	if h, _ := events.ReadHeartbeat(dir); h != nil && !h.Stale(time.Now()) {
+		return errors.New("the LINE hub is running on this session; signing out stops it and every listener. Pass --force to sign out anyway")
+	}
+	return nil
 }

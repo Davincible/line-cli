@@ -153,4 +153,8 @@ type syncBuf struct {
 }
 
 func (s *syncBuf) Write(p []byte) (int, error) { s.mu.Lock(); defer s.mu.Unlock(); return s.b.Write(p) }
-func (s *syncBuf) lines() int                  { s.mu.Lock(); defer s.mu.Unlock(); return strings.Count(s.b.String(), "\n") }
+func (s *syncBuf) lines() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return strings.Count(s.b.String(), "\n")
+}

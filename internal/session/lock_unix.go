@@ -24,7 +24,51 @@ func WatchLock() (func(), error) {
 	if errors.Is(err, ErrBusy) {
 		return nil, errors.New("another line watch is already running")
 	}
+	if err == nil {
+		heldWatchLock.path, heldWatchLock.id, err = watchLockIdentity()
+		if err != nil {
+			unlock()
+			return nil, err
+		}
+	}
 	return unlock, err
+}
+
+// heldWatchLock records which file this process locked, so a long-running
+// watcher can notice the file being deleted or replaced under it (fork).
+var heldWatchLock struct {
+	path string
+	id   [2]uint64
+}
+
+func watchLockIdentity() (string, [2]uint64, error) {
+	dir, err := sessionLockDir()
+	if err != nil {
+		return "", [2]uint64{}, err
+	}
+	path := filepath.Join(dir, "watch.lock")
+	var st unix.Stat_t
+	if err := unix.Lstat(path, &st); err != nil {
+		return path, [2]uint64{}, fmt.Errorf("check watch lock: %w", err)
+	}
+	return path, [2]uint64{uint64(st.Dev), uint64(st.Ino)}, nil
+}
+
+// WatchLockIntact reports an error if the watch lock this process holds is no
+// longer the file at its path. A watcher must then stop: another process could
+// lock the new file and run a second watcher on the same cursor.
+func WatchLockIntact() error {
+	if heldWatchLock.path == "" {
+		return nil
+	}
+	_, id, err := watchLockIdentity()
+	if err != nil {
+		return errors.New("the watch lock file disappeared; stopping so only one watcher can run")
+	}
+	if id != heldWatchLock.id {
+		return errors.New("the watch lock file was replaced; stopping so only one watcher can run")
+	}
+	return nil
 }
 
 func namedLock(name string) (func(), error) {
