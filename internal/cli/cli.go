@@ -24,7 +24,8 @@ Usage: line <command> [options]
 Everyday commands:
   login       Sign in by QR code (--email ADDRESS for email login)
   whoami      Show your signed-in account
-  contacts    Find friends (--search NAME) or look up people (--mid MID)
+  contacts    Find friends (--search NAME), look up people (--mid MID) or search by LINE ID (--find ID)
+  add         Add a person or official account as a friend by LINE ID
   chats       Browse recent conversations
   messages    Choose a chat and read messages
   send        Choose a recipient and write a message
@@ -46,6 +47,8 @@ Examples:
   line send "Alice" --text "Hello!"
   line send "Alice" --file report.pdf
   line chats --search "Family"
+  line contacts --find @shopname
+  line add @shopname
 
 In a terminal, missing details are prompted for. Ctrl-C cancels.
 Use --show-ids for IDs, --json for scripts, or COMMAND --help for all options.
@@ -107,6 +110,8 @@ func (a *App) Run(args []string) error {
 		return a.eventsCommand(args[1:])
 	case "contacts":
 		return a.contactsCommand(args[1:])
+	case "add":
+		return a.addCommand(args[1:])
 	case "chats":
 		return a.chatCommand(args[1:])
 	case "messages", "send":

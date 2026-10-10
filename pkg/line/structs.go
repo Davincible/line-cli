@@ -217,6 +217,28 @@ func (c Contact) EffectiveDisplayName() string {
 	return c.DisplayName
 }
 
+// AddFriendByMidRequest is RelationService/addFriendByMid's single argument.
+type AddFriendByMidRequest struct {
+	ReqSeq   int64             `json:"reqSeq"`
+	UserMid  string            `json:"userMid"`
+	Tracking AddFriendTracking `json:"tracking"`
+}
+
+// AddFriendTracking tells LINE how the friend was found. Reference is always
+// empty in LINE Chrome 3.7.2.
+type AddFriendTracking struct {
+	Reference      string                `json:"reference"`
+	TrackingMetaV2 AddFriendTrackingMeta `json:"trackingMetaV2"`
+}
+
+type AddFriendTrackingMeta struct {
+	SearchID *AddFriendSearchID `json:"searchId,omitempty"`
+}
+
+type AddFriendSearchID struct {
+	SearchID string `json:"searchId"`
+}
+
 type BuddyProfile struct {
 	Mid         string `json:"buddyMid"`
 	DisplayName string `json:"displayName"`

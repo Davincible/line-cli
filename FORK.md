@@ -17,6 +17,8 @@ Branch `davincible`, based on upstream tag `v0.4.0`. Built into `line` on David'
 | `line watch --log DIR` is the **hub**: events go to daily files (dir 0700, files 0600, `--retain`, default 14 days) plus a `hub.json` heartbeat | LINE allows one watcher and one resume position per account, so only one listener could ever run |
 | `line events [--follow] [--chat ID] [--from-revision N]` reads the hub's files; `line events --status` checks the heartbeat | Any number of readers, no session and no lock; deduplicates the one event a hub crash can replay; warns once when the hub stops |
 | `line login` refuses on a machine other than `LINE_CLI_SESSION_HOST` unless `--take-over` | LINE has one Chrome-style session per account; a login anywhere else silently signs the owner out and kills its hub |
+| `contacts --find ID` searches all of LINE by LINE ID (`someone`, or `@shopname` for an official account) and says whether it is already a friend. Read-only | Upstream could only look up friends by name or people by MID, so an agent could not find a shop from its LINE ID |
+| `add ID` adds that person or official account as a friend through `RelationService/addFriendByMid`, attempted once with a reserved sequence, never retried. An existing friend is reported and left alone | Messaging a new shop or person needed David's phone for one tap. Request shape read from the LINE Chrome 3.7.2 extension bundle (`static/js/main.js`), 11 October 2026 |
 | `LINE_CLI_DEBUG=1` adds the failure class (HTTP status and LINE code, or the Go error) to `LINE request failed` | Response bodies stay out, as upstream intended |
 
 The paging request shape comes from the LINE Chrome extension as reproduced by OkLine

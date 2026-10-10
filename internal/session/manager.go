@@ -27,6 +27,8 @@ type API interface {
 	RefreshAccessToken(string) (*line.TokenV3IssueResult, error)
 	GetAllContactIds() ([]string, error)
 	GetContactsV2([]string) (*line.ContactsResponse, error)
+	FindContactByUserid(string) (*line.Contact, error)
+	AddFriendByMid(int64, string, string) error
 	GetMessageBoxes(line.MessageBoxesOptions) (*line.MessageBoxesResponse, error)
 	GetRecentMessagesV2(string, int) ([]*line.Message, error)
 	GetPreviousMessagesV2(string, string, json.Number, int) ([]*line.Message, error)

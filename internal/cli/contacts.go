@@ -16,11 +16,11 @@ func (a *App) contactsCommand(args []string) error {
 	fs := flag.NewFlagSet("contacts", flag.ContinueOnError)
 	fs.SetOutput(a.Err)
 	fs.Usage = func() {
-		fmt.Fprintln(a.Err, "Usage: line contacts [options]\n       line contacts --mid MID [--mid MID ...] [--json]\nLists friends, or looks up supplied user IDs including non-friends.\nDirect lookup shows all requested IDs and names; unavailable contacts produce exit status 1.")
+		fmt.Fprintln(a.Err, "Usage: line contacts [options]\n       line contacts --mid MID [--mid MID ...] [--json]\n       line contacts --find LINE_ID [--json]\nLists friends, or looks up supplied user IDs including non-friends.\nDirect lookup shows all requested IDs and names; unavailable contacts produce exit status 1.")
 		fs.PrintDefaults()
 	}
 	var jsonOutput, showIDs bool
-	var search string
+	var search, find string
 	var mids []string
 	limit := 20
 	fs.StringVar(&search, "search", "", "find friends by name (cannot combine with --mid)")
@@ -29,6 +29,7 @@ func (a *App) contactsCommand(args []string) error {
 		mids = append(mids, mid)
 		return nil
 	})
+	fs.StringVar(&find, "find", "", "search all of LINE by LINE ID (someone, or @shopname for an official account); read-only")
 	fs.BoolVar(&showIDs, "show-ids", false, "show full IDs")
 	fs.BoolVar(&jsonOutput, "json", false, "write JSON to stdout")
 	if err := fs.Parse(args); err != nil {
@@ -40,15 +41,38 @@ func (a *App) contactsCommand(args []string) error {
 	if fs.NArg() != 0 {
 		return errors.New("unexpected arguments; use --mid MID for each user ID or --search NAME to find friends")
 	}
-	limitSet, searchSet := false, false
+	limitSet, searchSet, findSet := false, false, false
 	fs.Visit(func(f *flag.Flag) {
 		switch f.Name {
 		case "limit":
 			limitSet = true
 		case "search":
 			searchSet = true
+		case "find":
+			findSet = true
 		}
 	})
+	if findSet {
+		if limitSet || searchSet || len(mids) > 0 {
+			return errors.New("--find cannot be combined with --search, --limit or --mid")
+		}
+		if err := validateSearchID(find); err != nil {
+			return err
+		}
+		unlock, err := a.lock()
+		if err != nil {
+			return err
+		}
+		defer unlock()
+		found, err := a.findByID(find)
+		if err != nil {
+			return err
+		}
+		if jsonOutput {
+			return a.json(found)
+		}
+		return a.printFound(found)
+	}
 	if len(mids) > 0 {
 		if limitSet || searchSet {
 			return errors.New("--mid cannot be combined with --search or --limit; direct lookup returns every requested user ID")

@@ -1004,7 +1004,9 @@ func (c *Client) RejectChatInvitation(reqSeq int64, chatMid string) error {
 	return err
 }
 
-// FindContactByUserid looks up a LINE user by their user ID (not MID).
+// FindContactByUserid looks up a LINE user or official account by the ID people
+// search for in LINE (for example "someone" or "@shopname"), not by MID. LINE
+// Chrome 3.7.2 sends the search text as the only argument.
 func (c *Client) FindContactByUserid(userid string) (*Contact, error) {
 	resp, err := c.callRPC("TalkService", "findContactByUserid", userid)
 	if err != nil {
@@ -1019,9 +1021,39 @@ func (c *Client) FindContactByUserid(userid string) (*Contact, error) {
 		return nil, fmt.Errorf("failed to parse findContactByUserid response: %w", err)
 	}
 	if wrapper.Code != 0 {
-		return nil, fmt.Errorf("findContactByUserid failed: %s", wrapper.Message)
+		return nil, fmt.Errorf("findContactByUserid failed: code %d message %s", wrapper.Code, wrapper.Message)
 	}
 	return &wrapper.Data, nil
+}
+
+// AddFriendByMid adds a user or official account as a friend. The request shape
+// matches LINE Chrome 3.7.2 after a search by ID:
+// RelationService/addFriendByMid [{reqSeq, userMid, tracking:{reference:"",
+// trackingMetaV2:{searchId:{searchId}}}}].
+func (c *Client) AddFriendByMid(reqSeq int64, mid, searchID string) error {
+	req := AddFriendByMidRequest{
+		ReqSeq:  reqSeq,
+		UserMid: mid,
+		Tracking: AddFriendTracking{
+			TrackingMetaV2: AddFriendTrackingMeta{SearchID: &AddFriendSearchID{SearchID: searchID}},
+		},
+	}
+	resp, err := c.callRPCWithBaseURL(RelationBaseURL, "RelationService", "addFriendByMid", req)
+	if err != nil {
+		return err
+	}
+	var wrapper struct {
+		Code    int             `json:"code"`
+		Message string          `json:"message"`
+		Data    json.RawMessage `json:"data"`
+	}
+	if err := json.Unmarshal(resp, &wrapper); err != nil {
+		return fmt.Errorf("failed to parse addFriendByMid response: %w", err)
+	}
+	if wrapper.Code != 0 {
+		return fmt.Errorf("addFriendByMid failed: code %d message %s", wrapper.Code, wrapper.Message)
+	}
+	return nil
 }
 
 // GetAllContactIds returns the MIDs of all contacts.

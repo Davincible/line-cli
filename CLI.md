@@ -259,6 +259,20 @@ key was registered, and the request sequence.
 > The CLI attempts each send and other remote change once. If the response is
 > lost, check LINE before you retry: the action may have succeeded.
 
+### Find someone and add them as a friend
+
+Search all of LINE by the ID people share, then add them:
+
+```sh
+line contacts --find @shopname       # read-only: name, user ID, already a friend?
+line add @shopname                   # adds, once; an existing friend is left alone
+line send USER_ID --text "Hello"     # the user ID printed above
+```
+
+Official accounts use an `@` ID. `add` sends the same request as LINE for Chrome
+after a search by ID and is never retried: if it fails, check LINE before
+running it again.
+
 ### Download or change a message
 
 Find a message ID with `line messages CHAT --show-ids` or `--json`:
@@ -428,6 +442,8 @@ Ordinary CLI and network errors exit 1. Storage errors have
 | `whoami` | Profile and account ID. |
 | `contacts` | Friend names and IDs. |
 | `contacts --mid MID` | One record per unique requested MID, with a lookup status. |
+| `contacts --find ID` | `search_id`, `mid`, `display_name`, `status_message`, and `friend`. |
+| `add ID` | The same fields plus `action`, `status` (`added` or `already_friend`), and `request_sequence` when it added. |
 | `chats` | ID, type, unread count, name, and `updated_at` (fork: newest first, active only unless `--all`). |
 | `messages` | ID, sender, `from_name` (fork), time, content, encryption, and status. |
 | `send` | Message ID, chat ID, encryption, group-key registration, and sequence. |
@@ -509,7 +525,7 @@ works, the CLI renews access automatically, even after a restart. If refresh
 keeps failing or the refresh token is missing, you may need `line login`.
 
 Read-only requests may refresh credentials and retry once. Sends, reactions,
-unsend, and uploads are never replayed automatically: inspect LINE before
+unsend, adding a friend, and uploads are never replayed automatically: inspect LINE before
 repeating an action whose result is uncertain. The watcher reconnects when
 needed using saved credentials.
 

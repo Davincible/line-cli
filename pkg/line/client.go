@@ -25,6 +25,7 @@ import (
 const (
 	BaseURL               = "https://line-chrome-gw.line-apps.com/api/talk/thrift/Talk"
 	ShopBaseURL           = "https://line-chrome-gw.line-apps.com/api/shop/thrift/ShopService"
+	RelationBaseURL       = "https://line-chrome-gw.line-apps.com/api/talk/thrift/Relation"
 	ExtensionVersion      = "3.7.2"
 	UserAgent             = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
 	rpcClientTimeout      = 30 * time.Second
