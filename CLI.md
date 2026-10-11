@@ -486,7 +486,7 @@ The CLI stores one LINE account per operating-system user.
 
 | System | Storage |
 | --- | --- |
-| macOS | Keychain. |
+| macOS | Encrypted session file in `~/Library/Application Support/line-cli`; its key is in the Keychain, reached only through `/usr/bin/security`. |
 | Linux | Encrypted session file; its key is in Secret Service. |
 | Windows | Current-user DPAPI encrypted session file. |
 
@@ -776,8 +776,7 @@ line update --help
 
 ### Build from source
 
-You need Git and Go 1.26 or newer. macOS also needs Xcode Command Line Tools
-and CGO for Keychain support.
+You need Git and Go 1.26 or newer. No platform needs CGO.
 
 On macOS or Linux:
 

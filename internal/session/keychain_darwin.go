@@ -1,165 +1,143 @@
-//go:build darwin && cgo
+//go:build darwin
 
 package session
 
-/*
-#cgo LDFLAGS: -framework Security -framework CoreFoundation -framework Foundation -framework LocalAuthentication
-#include <Security/Security.h>
-#include <CoreFoundation/CoreFoundation.h>
-#include <stdlib.h>
-#include <string.h>
-void *lineNoInteractionContext(void);
-void lineReleaseContext(void *context);
-
-static CFMutableDictionaryRef sessionQuery(const char *account) {
-    CFMutableDictionaryRef q = CFDictionaryCreateMutable(NULL, 0,
-        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
-    CFDictionarySetValue(q, kSecClass, kSecClassGenericPassword);
-    CFDictionarySetValue(q, kSecAttrService, CFSTR("io.github.kongesque.line-cli"));
-    CFStringRef accountValue = CFStringCreateWithCString(NULL, account, kCFStringEncodingUTF8);
-    CFDictionarySetValue(q, kSecAttrAccount, accountValue);
-    CFRelease(accountValue);
-    return q;
-}
-
-typedef struct { OSStatus status; void *data; int length; } sessionResult;
-
-static sessionResult readSession(const char *account, int noPrompt) {
-    sessionResult result = {0, NULL, 0};
-    CFMutableDictionaryRef q = sessionQuery(account);
-    if (noPrompt) {
-        void *context = lineNoInteractionContext();
-        CFDictionarySetValue(q, kSecUseAuthenticationContext, context);
-        lineReleaseContext(context);
-    }
-    CFDictionarySetValue(q, kSecReturnData, kCFBooleanTrue);
-    CFDictionarySetValue(q, kSecMatchLimit, kSecMatchLimitOne);
-    CFTypeRef value = NULL;
-    result.status = SecItemCopyMatching(q, &value);
-    CFRelease(q);
-    if (result.status == errSecSuccess) {
-        CFDataRef data = (CFDataRef)value;
-        CFIndex length = CFDataGetLength(data);
-        if (length > (4 << 20)) {
-            result.status = errSecDecode;
-            CFRelease(value);
-            return result;
-        }
-        result.length = (int)length;
-        result.data = malloc(result.length ? result.length : 1);
-        if (!result.data) result.status = errSecAllocate;
-        else if (result.length) memcpy(result.data, CFDataGetBytePtr(data), result.length);
-        CFRelease(value);
-    }
-    return result;
-}
-
-static OSStatus writeSession(const char *account, const void *bytes, int length) {
-    CFMutableDictionaryRef q = sessionQuery(account);
-    CFDataRef data = CFDataCreate(NULL, bytes, length);
-    CFMutableDictionaryRef attrs = CFDictionaryCreateMutable(NULL, 0,
-        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
-    CFDictionarySetValue(attrs, kSecValueData, data);
-    OSStatus status = SecItemUpdate(q, attrs);
-    if (status == errSecItemNotFound) {
-        CFDictionarySetValue(q, kSecValueData, data);
-        status = SecItemAdd(q, NULL);
-    }
-    CFRelease(attrs);
-    CFRelease(data);
-    CFRelease(q);
-    return status;
-}
-
-static OSStatus deleteSession(const char *account) {
-    CFMutableDictionaryRef q = sessionQuery(account);
-    OSStatus status = SecItemDelete(q);
-    CFRelease(q);
-    return status;
-}
-*/
-import "C"
-
 import (
-	"crypto/rand"
-	"encoding/json"
-	"fmt"
-	"unsafe"
+	"errors"
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
 )
 
-type macKeychainStore struct{ account string }
+// macOS keeps the session the way Linux does: a 32-byte wrapping key in the
+// Keychain and the session in an AES-GCM file beside it. Only /usr/bin/security
+// touches the Keychain. Apple signs it, so items it creates open silently for
+// every build of this tool. The previous cgo store trusted the binary by code
+// hash, so each rebuild met a typed-password dialog, and a session with
+// exported E2EE keys is too large for one `security -i` line (4,096 chars).
 
-func (KeychainStore) Load() (*State, error) { return (macKeychainStore{"default"}).Load() }
-func (KeychainStore) Save(s *State) error   { return (macKeychainStore{"default"}).Save(s) }
-func (KeychainStore) Delete() error         { return (macKeychainStore{"default"}).Delete() }
+const (
+	legacyService = "io.github.kongesque.line-cli"
+	legacyAccount = "default"
+)
 
-func prepareNativeStorage() error {
-	if err := checkSavedStorage(macKeychainStore{"default"}); err != nil {
-		return err
+var errRealStoreInTest = errors.New("tests must not use the real Keychain or session file; set LINE_CLI_LIVE_READ=1 for a live test")
+
+func darwinStore() (secretFileStore, error) {
+	if testing.Testing() && os.Getenv("LINE_CLI_LIVE_READ") != "1" {
+		return secretFileStore{}, errRealStoreInTest
 	}
-	probe := macKeychainStore{"storage-probe-" + rand.Text()}
-	return exerciseStorage(probe, func() error { return removeStorageProbe(probe) })
+	dir, err := os.UserConfigDir()
+	if err != nil {
+		return secretFileStore{}, err
+	}
+	dir, err = filepath.Abs(filepath.Join(dir, "line-cli"))
+	if err != nil {
+		return secretFileStore{}, err
+	}
+	return secretFileStore{path: filepath.Join(dir, "session.enc"), secrets: secretToolStore{run: runSecurityTool}}, nil
 }
 
-func (s macKeychainStore) Load() (*State, error) {
-	return s.load(false)
+// legacyKeychain reaches the item the cgo build wrote. Reading it asks for the
+// login password once, because that item trusts old binaries by hash; it is
+// read only when no new session exists, then deleted, which never prompts.
+type legacyKeychain struct {
+	exec func(args []string, stdin []byte, timeout time.Duration) securityResult
 }
 
-func (s macKeychainStore) load(noPrompt bool) (*State, error) {
-	account := C.CString(s.account)
-	defer C.free(unsafe.Pointer(account))
-	var silent C.int
-	if noPrompt {
-		silent = 1
-	}
-	r := C.readSession(account, silent)
-	if r.data != nil {
-		defer C.free(r.data)
-		defer C.memset(r.data, 0, C.size_t(r.length))
-	}
-	if r.status == C.errSecItemNotFound {
+var legacy = legacyKeychain{exec: execSecurity}
+
+func (l legacyKeychain) read() ([]byte, error) {
+	r := l.exec([]string{"find-generic-password", "-s", legacyService, "-a", legacyAccount, "-w"}, nil, 2*time.Minute)
+	if r.err == nil && r.code == securityNotFound {
 		return nil, ErrNotFound
 	}
-	if r.status != C.errSecSuccess {
-		if noPrompt {
-			return nil, ErrStorageUnavailable
-		}
-		return nil, fmt.Errorf("read macOS Keychain (status %d)", r.status)
+	if r.err != nil || r.code != 0 {
+		clear(r.stdout)
+		return nil, errors.Join(ErrStorageUnavailable, errors.New("could not read the previous Keychain session; run line login"))
 	}
-	data := C.GoBytes(r.data, r.length)
-	defer clear(data)
-	return decodeSession(data)
+	value, err := decodeSecurityPassword(r.stdout)
+	clear(r.stdout)
+	return value, err
 }
 
-type macStatusStore struct{ macKeychainStore }
+func (l legacyKeychain) remove() error {
+	r := l.exec([]string{"delete-generic-password", "-s", legacyService, "-a", legacyAccount}, nil, 30*time.Second)
+	if r.err == nil && (r.code == 0 || r.code == securityNotFound) {
+		return nil
+	}
+	return errors.Join(ErrStorageUnavailable, errors.New("could not remove the previous Keychain session"))
+}
 
-func (s macStatusStore) Load() (*State, error) { return s.macKeychainStore.load(true) }
+// migrate moves a session saved by the cgo build into the new store. It runs
+// only when the new store has nothing, so it happens once per machine.
+func (l legacyKeychain) migrate(store Store) (*State, error) {
+	data, err := l.read()
+	if err != nil {
+		return nil, err
+	}
+	defer clear(data)
+	state, err := decodeSession(data)
+	if err != nil {
+		return nil, err
+	}
+	if err := store.Save(state); err != nil {
+		return nil, err
+	}
+	if err := l.remove(); err != nil {
+		return nil, err
+	}
+	return state, nil
+}
+
+func (KeychainStore) Load() (*State, error) {
+	store, err := darwinStore()
+	if err != nil {
+		return nil, err
+	}
+	state, err := store.Load()
+	if errors.Is(err, ErrNotFound) {
+		return legacy.migrate(store)
+	}
+	return state, err
+}
+
+func (KeychainStore) Save(state *State) error {
+	store, err := darwinStore()
+	if err != nil {
+		return err
+	}
+	if err := store.Save(state); err != nil {
+		return err
+	}
+	// A watcher still on the cgo build may write the old item back; keep
+	// removing it so nothing reads a stale copy.
+	return legacy.remove()
+}
+
+func (KeychainStore) Delete() error {
+	store, err := darwinStore()
+	if err != nil {
+		return err
+	}
+	return errors.Join(store.Delete(), legacy.remove())
+}
+
+func prepareNativeStorage() error {
+	store, err := darwinStore()
+	if err != nil {
+		return err
+	}
+	return prepareSecretFileStore(store)
+}
+
+// Status reads only the new store, so it can never raise the legacy item's
+// password dialog.
 func platformStorageStatus(check bool) (StorageStatus, error) {
-	return nativeStorageStatus(macStatusStore{macKeychainStore{"default"}}, check, func() error { return ErrReadOnlyStatus })
-}
-
-func (store macKeychainStore) Save(s *State) error {
-	data, err := json.Marshal(s)
-	if err != nil || len(data) > maxSessionBytes-1024 {
-		return fmt.Errorf("encode session for Keychain")
+	store, err := darwinStore()
+	if err != nil {
+		return initialStorageStatus("native"), err
 	}
-	defer clear(data)
-	account := C.CString(store.account)
-	defer C.free(unsafe.Pointer(account))
-	bytes := C.CBytes(data)
-	defer C.free(bytes)
-	defer C.memset(bytes, 0, C.size_t(len(data)))
-	if status := C.writeSession(account, bytes, C.int(len(data))); status != C.errSecSuccess {
-		return fmt.Errorf("save macOS Keychain (status %d)", status)
-	}
-	return nil
-}
-
-func (store macKeychainStore) Delete() error {
-	account := C.CString(store.account)
-	defer C.free(unsafe.Pointer(account))
-	if status := C.deleteSession(account); status != C.errSecSuccess && status != C.errSecItemNotFound {
-		return fmt.Errorf("delete macOS Keychain session (status %d)", status)
-	}
-	return nil
+	return nativeStorageStatus(store, check, func() error { return prepareSecretFileStore(store) })
 }

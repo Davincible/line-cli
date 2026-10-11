@@ -8,8 +8,6 @@ import (
 	"time"
 )
 
-var errHelperOutputLimit = errors.New("credential helper output exceeds limit")
-
 type boundedOutput struct {
 	// Embedding bytes.Buffer would promote ReadFrom and let os/exec's io.Copy
 	// bypass Write, removing the output bound.

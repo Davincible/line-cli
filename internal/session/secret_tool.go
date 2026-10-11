@@ -11,6 +11,8 @@ import (
 
 const maxSessionBytes = 4 << 20
 
+var errHelperOutputLimit = errors.New("credential helper output exceeds limit")
+
 func decodeSession(data []byte) (*State, error) {
 	var s State
 	if len(data) > maxSessionBytes || json.Unmarshal(data, &s) != nil {
